@@ -1,0 +1,1 @@
+ALTER TABLE public.campaigns ADD COLUMN dispatch_days integer[] NOT NULL DEFAULT ARRAY[0,1,2,3,4,5,6];

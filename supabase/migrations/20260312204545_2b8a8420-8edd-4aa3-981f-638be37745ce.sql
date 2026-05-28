@@ -1,0 +1,1 @@
+ALTER TABLE public.restaurants ADD COLUMN pix_key text DEFAULT NULL;

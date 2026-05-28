@@ -1,0 +1,1 @@
+ALTER TABLE public.drivers ADD COLUMN fixed_fee numeric NOT NULL DEFAULT 0;

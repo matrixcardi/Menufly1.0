@@ -1,0 +1,259 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+@layer base {
+  :root {
+    --background: 220 14% 96%;
+    --foreground: 220 14% 10%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 220 14% 10%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 14% 10%;
+
+    --primary: 38 92% 50%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 220 14% 93%;
+    --secondary-foreground: 220 14% 20%;
+
+    --muted: 220 10% 92%;
+    --muted-foreground: 220 8% 46%;
+
+    --accent: 142 70% 45%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 220 13% 90%;
+    --input: 220 13% 90%;
+    --ring: 38 92% 50%;
+
+    --radius: 1rem;
+
+    --promo: 38 100% 50%;
+    --promo-foreground: 30 10% 10%;
+    
+    --cashback: 142 70% 45%;
+    --cashback-foreground: 0 0% 100%;
+
+    --warning: 25 95% 53%;
+    --warning-foreground: 0 0% 100%;
+
+    --sidebar-background: 220 14% 96%;
+    --sidebar-foreground: 220 10% 25%;
+    --sidebar-primary: 38 92% 50%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 220 14% 93%;
+    --sidebar-accent-foreground: 220 14% 10%;
+    --sidebar-border: 220 13% 90%;
+    --sidebar-ring: 38 92% 50%;
+
+    /* Glass tokens */
+    --glass-bg: 0 0% 100% / 0.72;
+    --glass-border: 0 0% 100% / 0.2;
+    --glass-blur: 24px;
+    --glass-shadow: 0 8px 32px hsl(220 14% 10% / 0.06);
+  }
+
+  .dark {
+    --background: 220 14% 7%;
+    --foreground: 220 10% 94%;
+
+    --card: 220 14% 11%;
+    --card-foreground: 220 10% 94%;
+
+    --popover: 220 14% 11%;
+    --popover-foreground: 220 10% 94%;
+
+    --primary: 38 92% 50%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 220 12% 16%;
+    --secondary-foreground: 220 10% 90%;
+
+    --muted: 220 12% 18%;
+    --muted-foreground: 220 8% 55%;
+
+    --accent: 142 70% 45%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 62% 30%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 220 12% 18%;
+    --input: 220 12% 18%;
+    --ring: 38 92% 50%;
+
+    --sidebar-background: 220 14% 9%;
+    --sidebar-foreground: 220 10% 85%;
+    --sidebar-primary: 38 92% 50%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 220 12% 14%;
+    --sidebar-accent-foreground: 220 10% 90%;
+    --sidebar-border: 220 12% 16%;
+    --sidebar-ring: 38 92% 50%;
+
+    /* Glass tokens - dark */
+    --glass-bg: 220 14% 12% / 0.72;
+    --glass-border: 220 14% 20% / 0.3;
+    --glass-blur: 24px;
+    --glass-shadow: 0 8px 32px hsl(0 0% 0% / 0.3);
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+  }
+
+  /* Smooth scrolling */
+  html {
+    scroll-behavior: smooth;
+  }
+
+  /* Custom scrollbar */
+  ::-webkit-scrollbar {
+    width: 10px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: hsl(220 14% 12%);
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: hsl(var(--primary) / 0.5);
+    border-radius: 5px;
+    border: 2px solid hsl(220 14% 12%);
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--primary) / 0.8);
+  }
+
+  /* Firefox scrollbar */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--primary) / 0.5) hsl(220 14% 12%);
+  }
+
+  /* Hide scrollbar for clean mobile look */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+@layer components {
+  /* Glass morphism utility classes */
+  .glass {
+    background: hsl(var(--glass-bg));
+    backdrop-filter: blur(var(--glass-blur));
+    -webkit-backdrop-filter: blur(var(--glass-blur));
+    border: 1px solid hsl(var(--glass-border));
+    box-shadow: var(--glass-shadow);
+  }
+
+  .glass-subtle {
+    background: hsl(var(--glass-bg));
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid hsl(var(--glass-border));
+  }
+
+  .glass-card {
+    background: hsl(var(--glass-bg));
+    backdrop-filter: blur(var(--glass-blur));
+    -webkit-backdrop-filter: blur(var(--glass-blur));
+    border: 1px solid hsl(var(--glass-border));
+    box-shadow: var(--glass-shadow);
+    border-radius: var(--radius);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .glass-card:hover {
+    box-shadow: 0 12px 40px hsl(220 14% 10% / 0.1);
+    border-color: hsl(var(--ring) / 0.15);
+  }
+
+  .dark .glass-card:hover {
+    box-shadow: 0 12px 40px hsl(0 0% 0% / 0.4);
+  }
+
+  /* Apple-style smooth transitions */
+  .transition-apple {
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+}
+
+/* Menu theme overrides */
+[data-theme="light"] {
+  --background: 0 0% 100%;
+  --foreground: 220 10% 15%;
+  --card: 0 0% 98%;
+  --card-foreground: 220 10% 15%;
+  --secondary: 220 10% 96%;
+  --secondary-foreground: 220 10% 25%;
+  --muted: 220 10% 94%;
+  --muted-foreground: 220 8% 45%;
+  --border: 220 15% 90%;
+  --input: 220 15% 90%;
+}
+
+[data-theme="dark"] {
+  --background: 220 14% 7%;
+  --foreground: 220 10% 94%;
+  --card: 220 14% 11%;
+  --card-foreground: 220 10% 94%;
+  --popover: 220 14% 11%;
+  --popover-foreground: 220 10% 94%;
+  --secondary: 220 12% 16%;
+  --secondary-foreground: 220 10% 90%;
+  --muted: 220 12% 18%;
+  --muted-foreground: 220 8% 55%;
+  --border: 220 12% 18%;
+  --input: 220 12% 18%;
+}
+
+/* Prevent mobile virtual keyboard from pushing content up */
+@supports (height: 100dvh) {
+  html, body {
+    height: 100dvh;
+    overflow: auto;
+  }
+}
+
+/* Ensure inputs don't scroll the page when focused on mobile */
+input, textarea, select {
+  font-size: 16px !important;
+}
+
+/* Drawer inputs: prevent iOS zoom and scroll jump */
+[vaul-drawer] input,
+[vaul-drawer] textarea {
+  font-size: 16px !important;
+  -webkit-text-size-adjust: 100%;
+}

@@ -1,0 +1,2 @@
+ALTER TABLE public.restaurants ADD COLUMN IF NOT EXISTS delivery_mode text NOT NULL DEFAULT 'zones';
+ALTER TABLE public.restaurants ADD COLUMN IF NOT EXISTS default_delivery_fee numeric NOT NULL DEFAULT 0;

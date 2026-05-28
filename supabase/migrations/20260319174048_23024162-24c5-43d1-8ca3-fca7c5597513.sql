@@ -1,0 +1,1 @@
+ALTER TABLE public.orders ADD COLUMN accepted_at timestamp with time zone DEFAULT NULL;

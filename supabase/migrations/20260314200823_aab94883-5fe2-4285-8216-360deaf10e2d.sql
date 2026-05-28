@@ -1,0 +1,1 @@
+ALTER TABLE public.orders ADD COLUMN cancellation_reason text DEFAULT NULL;

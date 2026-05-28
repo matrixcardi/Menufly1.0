@@ -1,0 +1,1 @@
+ALTER TABLE public.recipe_items ADD COLUMN IF NOT EXISTS recipe_unit text NOT NULL DEFAULT 'g';

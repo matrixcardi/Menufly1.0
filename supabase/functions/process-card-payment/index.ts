@@ -1,0 +1,310 @@
+import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
+import { publicCorsHeaders } from "../_shared/cors.ts";
+
+const logStep = (step: string, details?: any) => {
+  const detailsStr = details ? ` - ${JSON.stringify(details)}` : '';
+  console.log(`[CARD-PAYMENT] ${step}${detailsStr}`);
+};
+
+async function refreshMPToken(supabaseClient: any, restaurantId: string, refreshToken: string): Promise<string | null> {
+  const appId = Deno.env.get("MP_APP_ID");
+  const clientSecret = Deno.env.get("MP_CLIENT_SECRET");
+
+  if (!appId || !clientSecret || !refreshToken) return null;
+
+  logStep("Refreshing Mercado Pago token");
+
+  const res = await fetch("https://api.mercadopago.com/oauth/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      client_secret: clientSecret,
+      client_id: appId,
+      grant_type: "refresh_token",
+      refresh_token: refreshToken,
+    }),
+  });
+
+  const data = await res.json();
+
+  if (!res.ok || !data.access_token) {
+    logStep("Token refresh failed", { status: res.status });
+    return null;
+  }
+
+  await supabaseClient
+    .from("restaurants")
+    .update({
+      pix_gateway_token: data.access_token,
+      mp_refresh_token: data.refresh_token,
+      mp_public_key: data.public_key || null,
+    })
+    .eq("id", restaurantId);
+
+  logStep("Token refreshed successfully");
+  return data.access_token;
+}
+
+type CardResult =
+  | { error: false; payment_id: string; status: string; status_detail: string }
+  | { error: true; status: number; body: string };
+
+async function createCardPaymentRequest(
+  accessToken: string,
+  orderId: string,
+  body: Record<string, unknown>,
+): Promise<CardResult> {
+  const response = await fetch("https://api.mercadopago.com/v1/payments", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${accessToken}`,
+      "X-Idempotency-Key": `card-${orderId}-${body.application_fee ? 'fee' : 'nofee'}`,
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.text();
+    logStep("MP card error", { status: response.status, body: errorData });
+    return { error: true, status: response.status, body: errorData };
+  }
+
+  const data = await response.json();
+  logStep("Card payment created", { id: data.id, status: data.status, status_detail: data.status_detail });
+
+  return {
+    error: false,
+    payment_id: String(data.id),
+    status: data.status,
+    status_detail: data.status_detail,
+  };
+}
+
+async function createCardPayment(
+  accessToken: string,
+  token: string,
+  amount: number,
+  description: string,
+  orderId: string,
+  installments: number,
+  payerEmail: string,
+  payerDocNumber: string,
+  paymentMethodId: string,
+  issuerId: string | null,
+): Promise<CardResult> {
+  logStep("Creating card payment via Mercado Pago", { amount, orderId, paymentMethodId });
+
+  const baseBody: Record<string, unknown> = {
+    transaction_amount: amount,
+    token,
+    description,
+    installments: installments || 1,
+    payment_method_id: paymentMethodId,
+    payer: {
+      email: payerEmail,
+      identification: {
+        type: "CPF",
+        number: payerDocNumber || "",
+      },
+    },
+    external_reference: orderId,
+  };
+
+  if (issuerId) {
+    baseBody.issuer_id = issuerId;
+  }
+
+  // Try with application_fee first
+  const withFeeBody = {
+    ...baseBody,
+    application_fee: Math.round((0.50 + amount * 0.005) * 100) / 100,
+  };
+
+  let result = await createCardPaymentRequest(accessToken, orderId, withFeeBody);
+
+  // If application_fee not supported, retry without it
+  if (result.error) {
+    const lowerBody = result.body.toLowerCase();
+    const shouldRetryWithoutFee =
+      result.status === 400 &&
+      (lowerBody.includes("application_fee") || lowerBody.includes("code\":2059"));
+
+    if (shouldRetryWithoutFee) {
+      logStep("application_fee not supported, retrying without fee");
+      result = await createCardPaymentRequest(accessToken, orderId, baseBody);
+    }
+  }
+
+  return result;
+}
+
+async function rollbackFailedCardOrder(supabaseClient: any, orderId: string, restaurantId: string) {
+  const { error } = await supabaseClient
+    .from("orders")
+    .delete()
+    .eq("id", orderId)
+    .eq("restaurant_id", restaurantId)
+    .eq("payment_status", "awaiting_payment")
+    .eq("status", "pending");
+
+  if (error) {
+    logStep("Failed to rollback order after card error", { orderId, error: error.message });
+    return;
+  }
+  logStep("Order rolled back after card payment failure", { orderId });
+}
+
+serve(async (req) => {
+  if (req.method === "OPTIONS") {
+    return new Response(null, { headers: publicCorsHeaders });
+  }
+
+  let orderId: string | null = null;
+  let restaurantId: string | null = null;
+  let paymentCreated = false;
+  let supabaseClient: any = null;
+
+  try {
+    logStep("Function started");
+
+    const {
+      order_id,
+      restaurant_id,
+      token,
+      installments,
+      payer_email,
+      payer_doc_number,
+      payment_method_id,
+      issuer_id,
+    } = await req.json();
+
+    orderId = order_id;
+    restaurantId = restaurant_id;
+
+    if (!orderId || !restaurantId || !token || !payment_method_id) {
+      throw new Error("Missing required fields: order_id, restaurant_id, token, payment_method_id");
+    }
+
+    supabaseClient = createClient(
+      Deno.env.get("SUPABASE_URL") ?? "",
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
+    );
+
+    // Fetch restaurant
+    const { data: restaurant, error: restError } = await supabaseClient
+      .from("restaurants")
+      .select("pix_gateway, pix_gateway_token, mp_refresh_token, name")
+      .eq("id", restaurantId)
+      .single();
+
+    if (restError || !restaurant) {
+      throw new Error("Restaurante não encontrado");
+    }
+
+    if (restaurant.pix_gateway !== "mercadopago" || !restaurant.pix_gateway_token) {
+      throw new Error("Mercado Pago não configurado. Conecte sua conta nas configurações.");
+    }
+
+    // Fetch order
+    const { data: order, error: orderError } = await supabaseClient
+      .from("orders")
+      .select("total, order_number, daily_number")
+      .eq("id", orderId)
+      .eq("restaurant_id", restaurantId)
+      .single();
+
+    if (orderError || !order) {
+      throw new Error("Pedido não encontrado");
+    }
+
+    const description = `Pedido #${order.daily_number || order.order_number} - ${restaurant.name}`;
+
+    let result = await createCardPayment(
+      restaurant.pix_gateway_token,
+      token,
+      order.total,
+      description,
+      orderId,
+      installments || 1,
+      payer_email || `pedido-${orderId}@menufly.app`,
+      payer_doc_number || "",
+      payment_method_id,
+      issuer_id || null,
+    );
+
+    // If 401, try refreshing token
+    if (result.error && result.status === 401 && restaurant.mp_refresh_token) {
+      logStep("Token expired, attempting refresh");
+      const newToken = await refreshMPToken(supabaseClient, restaurantId, restaurant.mp_refresh_token);
+      if (newToken) {
+        result = await createCardPayment(
+          newToken, token, order.total, description, orderId,
+          installments || 1, payer_email || `pedido-${orderId}@menufly.app`,
+          payer_doc_number || "",
+          payment_method_id, issuer_id || null,
+        );
+      }
+    }
+
+    if (result.error) {
+      throw new Error("Não foi possível processar o pagamento com cartão. Tente novamente ou escolha outro método.");
+    }
+
+    paymentCreated = true;
+
+    // Update order based on payment status
+    const paymentResult = result as { payment_id: string; status: string; status_detail: string };
+
+    let orderPaymentStatus = "awaiting_payment";
+    let orderStatus = "pending";
+
+    if (paymentResult.status === "approved") {
+      orderPaymentStatus = "paid";
+      orderStatus = "pending";
+    } else if (paymentResult.status === "rejected") {
+      orderPaymentStatus = "failed";
+      orderStatus = "cancelled";
+    } else if (paymentResult.status === "in_process") {
+      orderPaymentStatus = "awaiting_payment";
+    }
+
+    // Always update payment_method to 'card' (order may have been created with 'pix' as a hack)
+    await supabaseClient
+      .from("orders")
+      .update({
+        payment_status: orderPaymentStatus,
+        payment_method: "card",
+        status: orderStatus,
+      })
+      .eq("id", orderId);
+
+    logStep("Payment processed", { payment_id: paymentResult.payment_id, status: paymentResult.status });
+
+    return new Response(JSON.stringify({
+      success: true,
+      payment_id: paymentResult.payment_id,
+      status: paymentResult.status,
+      status_detail: paymentResult.status_detail,
+    }), {
+      headers: { ...publicCorsHeaders, "Content-Type": "application/json" },
+      status: 200,
+    });
+  } catch (error) {
+    // Rollback order if payment was not created
+    if (!paymentCreated && supabaseClient && orderId && restaurantId) {
+      await rollbackFailedCardOrder(supabaseClient, orderId, restaurantId);
+    }
+
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    logStep("ERROR", { message: errorMessage });
+    return new Response(JSON.stringify({
+      success: false,
+      error: errorMessage,
+    }), {
+      headers: { ...publicCorsHeaders, "Content-Type": "application/json" },
+      status: 200,
+    });
+  }
+});

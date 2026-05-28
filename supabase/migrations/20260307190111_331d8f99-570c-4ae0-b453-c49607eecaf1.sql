@@ -1,0 +1,1 @@
+ALTER TABLE public.coupons ADD COLUMN show_in_menu boolean NOT NULL DEFAULT true;
