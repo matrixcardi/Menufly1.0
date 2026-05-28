@@ -41,6 +41,9 @@ const AdminAI = lazy(() => import("./pages/admin/AdminAI"));
 const AdminCMV = lazy(() => import("./pages/admin/AdminCMV"));
 const AdminHome = lazy(() => import("./pages/admin/AdminHome"));
 const AdminDrivers = lazy(() => import("./pages/admin/AdminDrivers"));
+const AdminEstoque = lazy(() => import("./pages/admin/AdminEstoque"));
+const AdminFornecedores = lazy(() => import("./pages/admin/AdminFornecedores"));
+const AdminListaCompras = lazy(() => import("./pages/admin/AdminListaCompras"));
 const MasterAuth = lazy(() => import("./pages/master/MasterAuth"));
 const MasterLayout = lazy(() => import("./pages/master/MasterLayout"));
 const MasterDashboard = lazy(() => import("./pages/master/MasterDashboard"));
@@ -91,6 +94,9 @@ const App = () => (
               <Route path="produtos" element={<AdminDashboard />} />
               <Route path="promos" element={<AdminCoupons />} />
               <Route path="cupons" element={<AdminCoupons />} /> {/* backward compat */}
+              <Route path="estoque" element={<AdminEstoque />} />
+              <Route path="fornecedores" element={<AdminFornecedores />} />
+              <Route path="lista-compras" element={<AdminListaCompras />} />
               <Route path="entrega" element={<AdminDelivery />} />
               <Route path="ads" element={<AdminAds />} />
               <Route path="relatorios" element={<AdminReports />} />

@@ -56,6 +56,8 @@ import {
   Tag,
   Package,
   ClipboardList,
+  Box,
+  Building2,
   Megaphone,
   Copy,
   Check,
@@ -72,7 +74,6 @@ import {
   DollarSign,
   Crown,
   Plug,
-  Building2,
   Link2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -113,6 +114,12 @@ const menuItems = [
   { title: "Cardápio Digital", url: "/admin/cardapio", icon: Utensils },
   { title: "Produtos e Categorias", url: "/admin/produtos", icon: Package },
   { title: "Promos", url: "/admin/promos", icon: Tag },
+];
+
+const managementItems = [
+  { title: "Estoque", url: "/admin/estoque", icon: Box },
+  { title: "Fornecedores", url: "/admin/fornecedores", icon: Building2 },
+  { title: "Lista de Compras", url: "/admin/lista-compras", icon: ClipboardList },
 ];
 
 const settingsItems = [
@@ -348,6 +355,31 @@ function AdminSidebar({ pendingOrdersCount, isCollaborator, canAccessWhatsAppBot
               </SidebarGroupContent>
             </CollapsibleContent>
           </Collapsible>
+        </SidebarGroup>
+
+        {/* Gestão */}
+        <SidebarGroup>
+          <SidebarGroupLabel className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/70 px-3">
+            GESTÃO
+          </SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {managementItems.map((item) => (
+                <SidebarMenuItem key={item.title}>
+                  <SidebarMenuButton asChild>
+                    <NavLink
+                      to={item.url}
+                      className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-secondary/80 transition-all duration-200"
+                      activeClassName="bg-primary/10 text-primary font-medium shadow-apple-sm"
+                    >
+                      <item.icon className="w-4.5 h-4.5" />
+                      <span className="flex-1 text-sm">{item.title}</span>
+                    </NavLink>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
         </SidebarGroup>
 
         {/* Configurações - Collapsible */}
