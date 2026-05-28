@@ -116,6 +116,13 @@ const menuItems = [
   { title: "Promos", url: "/admin/promos", icon: Tag },
 ];
 
+const financeiroItems = [
+  { title: "Visão Geral", url: "/admin/bi-financeiro", icon: BarChart3 },
+  { title: "DRE", url: "/admin/dre", icon: DollarSign },
+  { title: "Custos de Insumos", url: "/admin/custos-insumos", icon: Package },
+  { title: "Extrato de Pedidos", url: "/admin/extrato-pedidos", icon: ClipboardList },
+];
+
 const managementItems = [
   { title: "Estoque", url: "/admin/estoque", icon: Box },
   { title: "Fornecedores", url: "/admin/fornecedores", icon: Building2 },
@@ -355,6 +362,31 @@ function AdminSidebar({ pendingOrdersCount, isCollaborator, canAccessWhatsAppBot
               </SidebarGroupContent>
             </CollapsibleContent>
           </Collapsible>
+        </SidebarGroup>
+
+        {/* FINANCEIRO */}
+        <SidebarGroup>
+          <SidebarGroupLabel className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/70 px-3">
+            FINANCEIRO
+          </SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {financeiroItems.map((item) => (
+                <SidebarMenuItem key={item.title}>
+                  <SidebarMenuButton asChild>
+                    <NavLink
+                      to={item.url}
+                      className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-secondary/80 transition-all duration-200"
+                      activeClassName="bg-primary/10 text-primary font-medium shadow-apple-sm"
+                    >
+                      <item.icon className="w-4.5 h-4.5" />
+                      <span className="flex-1 text-sm">{item.title}</span>
+                    </NavLink>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
         </SidebarGroup>
 
         {/* Gestão */}

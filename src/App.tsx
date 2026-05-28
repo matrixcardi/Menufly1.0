@@ -39,6 +39,10 @@ const AdminWhatsAppBot = lazy(() => import("./pages/admin/AdminWhatsAppBot"));
 const AdminPayments = lazy(() => import("./pages/admin/AdminPayments"));
 const AdminAI = lazy(() => import("./pages/admin/AdminAI"));
 const AdminCMV = lazy(() => import("./pages/admin/AdminCMV"));
+const AdminBIVisaoGeral = lazy(() => import("./pages/admin/AdminBIVisaoGeral"));
+const AdminDRE = lazy(() => import("./pages/admin/AdminDRE"));
+const AdminCustosInsumos = lazy(() => import("./pages/admin/AdminCustosInsumos"));
+const AdminExtratoPedidos = lazy(() => import("./pages/admin/AdminExtratoPedidos"));
 const AdminHome = lazy(() => import("./pages/admin/AdminHome"));
 const AdminDrivers = lazy(() => import("./pages/admin/AdminDrivers"));
 const AdminEstoque = lazy(() => import("./pages/admin/AdminEstoque"));
@@ -107,6 +111,10 @@ const App = () => (
               <Route path="campanhas" element={<AdminCampaigns />} />
               <Route path="ia" element={<AdminAI />} />
               <Route path="cmv" element={<AdminCMV />} />
+              <Route path="bi-financeiro" element={<AdminBIVisaoGeral />} />
+              <Route path="dre" element={<AdminDRE />} />
+              <Route path="custos-insumos" element={<AdminCustosInsumos />} />
+              <Route path="extrato-pedidos" element={<AdminExtratoPedidos />} />
               <Route path="entregadores" element={<AdminDrivers />} />
               <Route path="colaboradores" element={<AdminCollaborators />} />
               <Route path="whatsapp-bot" element={<AdminWhatsAppBot />} />
