@@ -59,6 +59,8 @@ const MasterAccounts = lazy(() => import("./pages/master/MasterAccounts"));
 const AdminCollaborators = lazy(() => import("./pages/admin/AdminCollaborators"));
 const AdminIntegrations = lazy(() => import("./pages/admin/AdminIntegrations"));
 const AdminSubscription = lazy(() => import("./pages/admin/AdminSubscription"));
+const AdminAgendamento = lazy(() => import("./pages/admin/AdminAgendamento"));
+const AdminAgendaDia = lazy(() => import("./pages/admin/AdminAgendaDia"));
 
 const queryClient = new QueryClient();
 
@@ -101,6 +103,7 @@ const App = () => (
               <Route path="estoque" element={<AdminEstoque />} />
               <Route path="fornecedores" element={<AdminFornecedores />} />
               <Route path="lista-compras" element={<AdminListaCompras />} />
+              <Route path="agenda-dia" element={<AdminAgendaDia />} />
               <Route path="entrega" element={<AdminDelivery />} />
               <Route path="ads" element={<AdminAds />} />
               <Route path="relatorios" element={<AdminReports />} />
@@ -120,6 +123,7 @@ const App = () => (
               <Route path="whatsapp-bot" element={<AdminWhatsAppBot />} />
               <Route path="integracoes" element={<AdminIntegrations />} />
               <Route path="assinatura" element={<AdminSubscription />} />
+              <Route path="agendamento" element={<AdminAgendamento />} />
             </Route>
             
             {/* Master Panel */}

@@ -1,9 +1,11 @@
 import { useState, useEffect, useMemo } from "react";
-import { ArrowLeft, MapPin, Store, ChevronDown, Loader2, Radar, Navigation } from "lucide-react";
+import { ArrowLeft, MapPin, Store, ChevronDown, Loader2, Radar, Navigation, Calendar, Clock } from "lucide-react";
 import { z } from "zod";
 import { supabase } from "@/integrations/supabase/client";
 import { haversineDistanceKm } from "@/lib/haversine";
 import { geocodeCep, reverseGeocode } from "@/lib/geocoding";
+import { format, addDays, parse, startOfDay, endOfDay } from "date-fns";
+import { ptBR } from "date-fns/locale";
 import {
   Drawer,
   DrawerContent,
@@ -13,6 +15,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { PaymentDrawer } from "./PaymentDrawer";
 
 interface AddressDrawerProps {
@@ -102,7 +105,15 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
   // When both zone types exist, the user must pick which flow to use.
   const [locationMode, setLocationMode] = useState<"radius" | "neighborhood" | null>(null);
 
-  // Fetch restaurant address + delivery zones
+  // Scheduling state
+  const [schedulingConfig, setSchedulingConfig] = useState<any>(null);
+  const [enableScheduling, setEnableScheduling] = useState(false);
+  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+  const [selectedSlot, setSelectedSlot] = useState<{ start: Date; end: Date } | null>(null);
+  const [availableSlots, setAvailableSlots] = useState<Array<{ start: Date; end: Date; available: number }>>([]);
+  const [loadingSlots, setLoadingSlots] = useState(false);
+
+  // Fetch restaurant address + delivery zones + scheduling config
   useEffect(() => {
     if (!restaurantId) return;
 
@@ -124,6 +135,16 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
       .order("name")
       .then(({ data }) => {
         if (data) setZones(data as DeliveryZone[]);
+      });
+
+    // Load scheduling config
+    supabase
+      .from("scheduling_config" as any)
+      .select("*")
+      .eq("restaurant_id", restaurantId)
+      .single()
+      .then(({ data }) => {
+        if (data) setSchedulingConfig(data);
       });
   }, [restaurantId]);
 
@@ -331,12 +352,12 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
     onOpenChange(false);
   };
 
-  const isPickupValid = deliveryMethod === "pickup";
+  const isPickupValid = deliveryMethod === "pickup" && (!enableScheduling || (selectedDate && selectedSlot));
   const isDeliveryValid = deliveryMethod === "delivery" && !!locationMode && (
     isRadiusMode
       ? (userLat !== null && userLng !== null && !isOutOfRange && address.number.trim().length >= 1 && address.street.trim().length >= 3)
       : (address.street.length >= 3 && address.number.length >= 1 && !!selectedZoneId)
-  );
+  ) && (!enableScheduling || (selectedDate && selectedSlot));
 
   const canProceed = isPickupValid || isDeliveryValid;
   const hasDeliveryOption = hasRadiusZones || hasNeighborhoodZones;
@@ -360,10 +381,116 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
       setResolvedCity("");
       setResolvedState("");
       setResolvingAddress(false);
+      setEnableScheduling(false);
+      setSelectedDate(null);
+      setSelectedSlot(null);
+      setAvailableSlots([]);
       // Reset location mode only if user has a real choice; otherwise auto-select effect will refill it
       if (hasBothModes) setLocationMode(null);
     }
   }, [open, showPaymentDrawer, hasBothModes]);
+
+  // Check if scheduling is enabled for the selected delivery method
+  const isSchedulingEnabled = deliveryMethod === "delivery" 
+    ? schedulingConfig?.enabled_delivery 
+    : deliveryMethod === "pickup" 
+      ? schedulingConfig?.enabled_pickup 
+      : false;
+
+  // Load available slots when date is selected
+  useEffect(() => {
+    async function loadSlots() {
+      if (!selectedDate || !restaurantId || !schedulingConfig) {
+        setAvailableSlots([]);
+        return;
+      }
+
+      setLoadingSlots(true);
+      try {
+        const dayStart = startOfDay(selectedDate);
+        const dayEnd = endOfDay(selectedDate);
+
+        // Get blocked slots
+        const { data: blockedData } = await supabase
+          .from("scheduling_blocked_slots" as any)
+          .select("blocked_at")
+          .eq("restaurant_id", restaurantId)
+          .gte("blocked_at", dayStart.toISOString())
+          .lte("blocked_at", dayEnd.toISOString());
+
+        const blockedTimes = new Set(
+          (blockedData || []).map((b: any) => new Date(b.blocked_at).getTime())
+        );
+
+        // Get existing orders for the day
+        const { data: ordersData } = await supabase
+          .from("orders")
+          .select("scheduled_at")
+          .eq("restaurant_id", restaurantId)
+          .not("scheduled_at", "is", null)
+          .gte("scheduled_at", dayStart.toISOString())
+          .lte("scheduled_at", dayEnd.toISOString());
+
+        // Count orders per slot
+        const slotCounts = new Map<number, number>();
+        (ordersData || []).forEach((order: any) => {
+          if (order.scheduled_at) {
+            const time = new Date(order.scheduled_at).getTime();
+            slotCounts.set(time, (slotCounts.get(time) || 0) + 1);
+          }
+        });
+
+        // Generate slots based on config
+        const dayOfWeek = format(selectedDate, "EEEE", { locale: ptBR }).toLowerCase();
+        const dayKey = dayOfWeek === "segunda-feira" ? "monday" :
+                      dayOfWeek === "terça-feira" ? "tuesday" :
+                      dayOfWeek === "quarta-feira" ? "wednesday" :
+                      dayOfWeek === "quinta-feira" ? "thursday" :
+                      dayOfWeek === "sexta-feira" ? "friday" :
+                      dayOfWeek === "sábado" ? "saturday" : "sunday";
+
+        const daySchedule = schedulingConfig.schedule?.[dayKey];
+
+        if (!daySchedule || !daySchedule.enabled) {
+          setAvailableSlots([]);
+          setLoadingSlots(false);
+          return;
+        }
+
+        const startTime = parse(daySchedule.start, "HH:mm", selectedDate);
+        const endTime = parse(daySchedule.end, "HH:mm", selectedDate);
+        const intervalMinutes = schedulingConfig.slot_interval_minutes || 30;
+        const maxOrders = schedulingConfig.max_orders_per_slot || 5;
+
+        const slots: Array<{ start: Date; end: Date; available: number }> = [];
+        let currentStart = startTime;
+
+        while (currentStart < endTime) {
+          const currentEnd = new Date(currentStart.getTime() + intervalMinutes * 60000);
+          const isBlocked = blockedTimes.has(currentStart.getTime());
+          const orderCount = slotCounts.get(currentStart.getTime()) || 0;
+          const available = isBlocked ? 0 : maxOrders - orderCount;
+
+          slots.push({
+            start: currentStart,
+            end: currentEnd,
+            available,
+          });
+
+          currentStart = currentEnd;
+        }
+
+        setAvailableSlots(slots);
+      } catch (error) {
+        console.error("Error loading slots:", error);
+        setAvailableSlots([]);
+      } finally {
+        setLoadingSlots(false);
+      }
+    }
+
+    loadSlots();
+  }, [selectedDate, restaurantId, schedulingConfig]);
 
   // Build delivery fee and neighborhood for payment drawer
   const currentDeliveryFee = isRadiusMode
@@ -494,6 +621,121 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
                   <p className="text-xs text-muted-foreground">
                     Horário: {restaurantData.opening_time} às {restaurantData.closing_time}
                   </p>
+                )}
+              </div>
+            )}
+
+            {/* Scheduling Toggle */}
+            {deliveryMethod && isSchedulingEnabled && (
+              <div className="space-y-4 pt-4 border-t border-border">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-1">
+                    <Label className="text-sm font-semibold">Agendar para depois</Label>
+                    <p className="text-xs text-muted-foreground">Escolha uma data e hora para receber seu pedido</p>
+                  </div>
+                  <Switch
+                    checked={enableScheduling}
+                    onCheckedChange={(checked) => {
+                      setEnableScheduling(checked);
+                      if (!checked) {
+                        setSelectedDate(null);
+                        setSelectedSlot(null);
+                        setAvailableSlots([]);
+                      }
+                    }}
+                  />
+                </div>
+
+                {enableScheduling && (
+                  <div className="space-y-4">
+                    {/* Date Selector */}
+                    <div className="space-y-2">
+                      <Label className="text-sm font-medium">Selecione a data</Label>
+                      <div className="grid grid-cols-3 gap-2">
+                        {[0, 1, 2, 3, 4, 5, 6].map((days) => {
+                          const date = addDays(new Date(), days);
+                          const dayOfWeek = format(date, "EEEE", { locale: ptBR });
+                          const dayKey = dayOfWeek === "segunda-feira" ? "monday" :
+                                        dayOfWeek === "terça-feira" ? "tuesday" :
+                                        dayOfWeek === "quarta-feira" ? "wednesday" :
+                                        dayOfWeek === "quinta-feira" ? "thursday" :
+                                        dayOfWeek === "sexta-feira" ? "friday" :
+                                        dayOfWeek === "sábado" ? "saturday" : "sunday";
+                          const daySchedule = schedulingConfig?.schedule?.[dayKey];
+                          const isDayEnabled = daySchedule?.enabled;
+
+                          if (!isDayEnabled) return null;
+
+                          const isSelected = selectedDate && format(selectedDate, "yyyy-MM-dd") === format(date, "yyyy-MM-dd");
+
+                          return (
+                            <button
+                              key={days}
+                              type="button"
+                              onClick={() => {
+                                setSelectedDate(date);
+                                setSelectedSlot(null);
+                              }}
+                              className={`p-3 rounded-lg border-2 transition-all text-center ${
+                                isSelected
+                                  ? "border-primary bg-primary/5"
+                                  : "border-border hover:border-muted-foreground/50"
+                              }`}
+                            >
+                              <p className="text-xs text-muted-foreground">{dayOfWeek}</p>
+                              <p className="font-semibold">{format(date, "dd/MM")}</p>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Time Selector */}
+                    {selectedDate && (
+                      <div className="space-y-2">
+                        <Label className="text-sm font-medium">Selecione o horário</Label>
+                        {loadingSlots ? (
+                          <div className="flex items-center justify-center p-4">
+                            <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+                          </div>
+                        ) : availableSlots.length === 0 ? (
+                          <p className="text-sm text-muted-foreground">Nenhum horário disponível para esta data</p>
+                        ) : (
+                          <div className="grid grid-cols-3 gap-2">
+                            {availableSlots.map((slot, index) => {
+                              const isSelected = selectedSlot && selectedSlot.start.getTime() === slot.start.getTime();
+                              const isFull = slot.available === 0;
+                              const isAvailable = slot.available > 0;
+
+                              return (
+                                <button
+                                  key={index}
+                                  type="button"
+                                  onClick={() => isAvailable && setSelectedSlot(slot)}
+                                  disabled={!isAvailable}
+                                  className={`p-3 rounded-lg border-2 transition-all text-center ${
+                                    isSelected
+                                      ? "border-primary bg-primary/5"
+                                      : isAvailable
+                                        ? "border-border hover:border-muted-foreground/50"
+                                        : "border-border opacity-50 cursor-not-allowed"
+                                  }`}
+                                >
+                                  <div className="flex items-center justify-center gap-1">
+                                    <Clock className="w-3 h-3 text-muted-foreground" />
+                                    <p className="font-semibold text-sm">{format(slot.start, "HH:mm")}</p>
+                                  </div>
+                                  <p className="text-xs text-muted-foreground">
+                                    {isFull ? "Cheio" : `${slot.available} disponíveis`}
+                                  </p>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 )}
               </div>
             )}
@@ -862,6 +1104,8 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
         deliveryFee={deliveryMethod === "delivery" ? currentDeliveryFee : 0}
         restaurantId={restaurantId}
         restaurantSlug={restaurantSlug}
+        scheduledAt={selectedSlot?.start.toISOString() || null}
+        schedulingType={enableScheduling ? (deliveryMethod === "delivery" ? "delivery" : "retirada") : null}
       />
     </>
   );

@@ -26,6 +26,7 @@ import {
   MessageCircle,
   DollarSign,
   ExternalLink,
+  Calendar,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -501,6 +502,22 @@ function CompactOrderCard({ order, onClick, formatCurrency, restaurantName, show
 
   const isNew = order.status === "pending";
   const isRejected = order.status === "rejected" || (order as any).status === "cancelled";
+  const isScheduled = order.scheduled_at != null;
+  const scheduledDate = isScheduled ? new Date(order.scheduled_at) : null;
+
+  const formatScheduledDate = (date: Date) => {
+    const today = new Date();
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    
+    const isToday = date.toDateString() === today.toDateString();
+    const isTomorrow = date.toDateString() === tomorrow.toDateString();
+    
+    const dateStr = isToday ? "hoje" : isTomorrow ? "amanhã" : date.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
+    const timeStr = date.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+    
+    return `Agendado para ${dateStr} ${timeStr}`;
+  };
 
   return (
     <button
@@ -533,6 +550,12 @@ function CompactOrderCard({ order, onClick, formatCurrency, restaurantName, show
             {(order as any).source === "ifood" && (
               <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-red-500/15 text-red-600 dark:text-red-400">
                 iFood
+              </span>
+            )}
+            {isScheduled && scheduledDate && (
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-orange-500/15 text-orange-600 dark:text-orange-400">
+                <Calendar className="w-3 h-3" />
+                {formatScheduledDate(scheduledDate)}
               </span>
             )}
           </div>
@@ -602,6 +625,22 @@ function OrderDetailDialog({ order, onChangeStatus, onCancelOrder, onPrint, form
     addonNames?: Record<string, string>;
   }>;
   const createdAt = new Date(order.created_at || "");
+  const isScheduled = order.scheduled_at != null;
+  const scheduledDate = isScheduled ? new Date(order.scheduled_at) : null;
+
+  const formatScheduledDate = (date: Date) => {
+    const today = new Date();
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    
+    const isToday = date.toDateString() === today.toDateString();
+    const isTomorrow = date.toDateString() === tomorrow.toDateString();
+    
+    const dateStr = isToday ? "hoje" : isTomorrow ? "amanhã" : date.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
+    const timeStr = date.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+    
+    return `Agendado para ${dateStr} ${timeStr}`;
+  };
 
   return (
     <>
@@ -617,6 +656,12 @@ function OrderDetailDialog({ order, onChangeStatus, onCancelOrder, onPrint, form
           {createdAt.toLocaleDateString("pt-BR")} às {createdAt.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
           {" · "}{order.delivery_type === "delivery" ? "🛵 Entrega" : "🏪 Retirada"}
         </p>
+        {isScheduled && scheduledDate && (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-orange-500/15 text-orange-600 dark:text-orange-400 w-fit">
+            <Calendar className="w-3 h-3" />
+            {formatScheduledDate(scheduledDate)}
+          </span>
+        )}
         {showRestaurantTag && restaurantName && (
           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-muted text-muted-foreground w-fit">
             🏪 {restaurantName}

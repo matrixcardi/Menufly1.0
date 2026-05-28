@@ -34,6 +34,8 @@ interface PaymentDrawerProps {
   deliveryFee?: number;
   restaurantId?: string;
   restaurantSlug?: string;
+  scheduledAt?: string | null;
+  schedulingType?: string | null;
 }
 
 type PaymentMethodType = "cash" | "credit_card" | "debit_card" | "pix" | "card_online" | null;
@@ -48,6 +50,8 @@ export function PaymentDrawer({
   deliveryFee = 0,
   restaurantId,
   restaurantSlug,
+  scheduledAt,
+  schedulingType,
 }: PaymentDrawerProps) {
   const navigate = useNavigate();
   const { items, coupon, subtotal, discount, total, clearCart, activeBenefits, hasFreeShipping } = useCart();
@@ -153,6 +157,8 @@ export function PaymentDrawer({
         p_promo_id: items.find(i => i.promoId)?.promoId || null,
         p_auto_promo_ids: activeBenefits.map(b => b.promoId),
         p_delivery_fee: deliveryMethod === "delivery" ? deliveryFee : 0,
+        p_scheduled_at: scheduledAt || null,
+        p_scheduling_type: schedulingType || null,
       };
 
       const { data, error } = await supabase.rpc('submit_order', rpcParams);

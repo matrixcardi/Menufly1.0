@@ -75,6 +75,7 @@ import {
   Crown,
   Plug,
   Link2,
+  Calendar,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -127,6 +128,7 @@ const managementItems = [
   { title: "Estoque", url: "/admin/estoque", icon: Box },
   { title: "Fornecedores", url: "/admin/fornecedores", icon: Building2 },
   { title: "Lista de Compras", url: "/admin/lista-compras", icon: ClipboardList },
+  { title: "Agenda do Dia", url: "/admin/agenda-dia", icon: Calendar },
 ];
 
 const settingsItems = [
@@ -139,6 +141,7 @@ const settingsItems = [
   { title: "Impressora", url: "/admin/impressora", icon: Printer },
   { title: "Colaboradores", url: "/admin/colaboradores", icon: Users, restrictCollaborator: true },
   { title: "Integrações", url: "/admin/integracoes", icon: Plug },
+  { title: "Agendamento", url: "/admin/agendamento", icon: Calendar },
 ];
 
 interface RestaurantCardProps {
