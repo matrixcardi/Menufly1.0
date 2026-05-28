@@ -102,6 +102,7 @@ export default function AdminEstoque() {
   const [rows, setRows] = useState<StockRowVM[]>([]);
   const [rawStock, setRawStock] = useState<StockLevelRow[]>([]);
   const [lastMovementByIngredient, setLastMovementByIngredient] = useState<Record<string, string | null>>({});
+  const [allIngredients, setAllIngredients] = useState<Ingredient[]>([]);
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<FilterStatus>("todos");
@@ -128,17 +129,14 @@ export default function AdminEstoque() {
   const [ajusteReason, setAjusteReason] = useState<string>("");
 
   const ingredientOptions = useMemo(() => {
-    const map = new Map<string, { id: string; name: string; unit: string }>();
-    rawStock.forEach((r) => {
-      if (!r.ingredients?.id) return;
-      map.set(r.ingredients.id, {
-        id: r.ingredients.id,
-        name: r.ingredients.name,
-        unit: r.unit || r.ingredients.unit || "un",
-      });
-    });
-    return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
-  }, [rawStock]);
+    return allIngredients
+      .map((ing) => ({
+        id: ing.id,
+        name: ing.name,
+        unit: ing.unit || "un",
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
+  }, [allIngredients]);
 
   async function fetchSuppliersIfNeeded() {
     if (!restaurantId) return;
@@ -156,6 +154,23 @@ export default function AdminEstoque() {
       return;
     }
     setSuppliers((data as Supplier[]) || []);
+  }
+
+  async function fetchIngredients() {
+    if (!restaurantId) {
+      setAllIngredients([]);
+      return;
+    }
+    const { data, error } = await supabase
+      .from("ingredients")
+      .select("id, name, unit")
+      .eq("restaurant_id", restaurantId)
+      .order("name");
+    if (error) {
+      toast({ title: "Erro ao carregar ingredientes", description: error.message, variant: "destructive" });
+      return;
+    }
+    setAllIngredients((data as Ingredient[]) || []);
   }
 
   async function fetchStock() {
@@ -230,6 +245,7 @@ export default function AdminEstoque() {
 
   useEffect(() => {
     fetchStock();
+    fetchIngredients();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [restaurantId]);
 

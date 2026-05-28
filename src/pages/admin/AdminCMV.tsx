@@ -43,6 +43,7 @@ interface Ingredient {
   unit: string;
   cost_per_unit: number;
   created_at: string;
+  min_quantity?: number;
 }
 
 interface RecipeItem {
@@ -385,6 +386,8 @@ export default function AdminCMV() {
     if (!editingIngredient?.name?.trim()) return;
     setSavingIngredient(true);
 
+    let ingredientId: string | null = null;
+
     if (editingIngredient.id) {
       const { error } = await supabase.from("ingredients").update({
         name: editingIngredient.name.trim(),
@@ -394,15 +397,46 @@ export default function AdminCMV() {
       }).eq("id", editingIngredient.id);
       if (error) { toast({ title: "Erro", description: error.message, variant: "destructive" }); }
       else { toast({ title: "Ingrediente atualizado!" }); }
+      ingredientId = editingIngredient.id;
     } else {
-      const { error } = await supabase.from("ingredients").insert({
+      const { data, error } = await supabase.from("ingredients").insert({
         restaurant_id: restaurantId,
         name: editingIngredient.name.trim(),
         unit: editingIngredient.unit || "g",
         cost_per_unit: Number(editingIngredient.cost_per_unit) || 0,
-      });
+      }).select("id").single();
       if (error) { toast({ title: "Erro", description: error.message, variant: "destructive" }); }
       else { toast({ title: "Ingrediente cadastrado!" }); }
+      ingredientId = data?.id || null;
+    }
+
+    // Handle stock_levels if min_quantity is provided
+    if (ingredientId && editingIngredient.min_quantity !== undefined && editingIngredient.min_quantity > 0) {
+      // Check if stock_levels record exists
+      const { data: existingStock } = await supabase
+        .from("stock_levels")
+        .select("id")
+        .eq("restaurant_id", restaurantId)
+        .eq("ingredient_id", ingredientId)
+        .maybeSingle();
+
+      if (existingStock) {
+        // Update existing record
+        await supabase.from("stock_levels").update({
+          min_quantity: editingIngredient.min_quantity,
+          unit: editingIngredient.unit || "g",
+          updated_at: new Date().toISOString(),
+        }).eq("id", existingStock.id);
+      } else {
+        // Create new record with current_quantity = 0
+        await supabase.from("stock_levels").insert({
+          restaurant_id: restaurantId,
+          ingredient_id: ingredientId,
+          current_quantity: 0,
+          min_quantity: editingIngredient.min_quantity,
+          unit: editingIngredient.unit || "g",
+        });
+      }
     }
 
     setSavingIngredient(false);
@@ -1058,7 +1092,7 @@ export default function AdminCMV() {
               <Card className="border-primary/30">
                 <CardContent className="pt-4 space-y-3">
                   <p className="font-semibold text-sm">{editingIngredient.id ? "Editar" : "Novo"} Ingrediente</p>
-                  <div className="grid grid-cols-[1fr_120px_120px] gap-3">
+                  <div className="grid grid-cols-[1fr_120px_120px_120px] gap-3">
                     <div className="space-y-1">
                       <Label className="text-xs">Nome</Label>
                       <Input
@@ -1085,6 +1119,15 @@ export default function AdminCMV() {
                         type="number" min={0} step={0.01}
                         value={editingIngredient.cost_per_unit || ""}
                         onChange={e => setEditingIngredient(prev => ({ ...prev!, cost_per_unit: Number(e.target.value) }))}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Estoque mínimo (opcional)</Label>
+                      <Input
+                        type="number" min={0} step={0.01}
+                        placeholder="0"
+                        value={editingIngredient.min_quantity || ""}
+                        onChange={e => setEditingIngredient(prev => ({ ...prev!, min_quantity: e.target.value ? Number(e.target.value) : undefined }))}
                       />
                     </div>
                   </div>
