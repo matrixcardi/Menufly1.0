@@ -77,6 +77,21 @@ const PLATFORMS: PlatformConfig[] = [
     ],
   },
   {
+    id: "99food",
+    name: "99food",
+    logo: "99food",
+    color: "from-[#FFB800] to-[#FF8C00]",
+    description: "Receba pedidos do 99food diretamente no Menufly. Gerencie tudo em um painel unificado.",
+    docsUrl: "https://www.99food.com.br",
+    steps: [
+      "Acesse o portal da 99food e faça login com sua conta de gerente da loja",
+      "No menu lateral, acesse \"Configurações\" → \"Integrações\"",
+      "Procure por \"Menufly\" na lista de integradores e clique em \"Autorizar\"",
+      "Após autorizar, copie o ID da Loja que aparece no portal",
+      "Cole o ID da Loja no campo abaixo e clique em Conectar",
+    ],
+  },
+  {
     id: "aiqfome",
     name: "aiqfome",
     logo: "🟣",
@@ -675,11 +690,16 @@ export default function AdminIntegrations() {
                   }`}
                 >
                   <div className="flex items-start justify-between gap-2">
-                    <div className={`w-10 h-10 rounded-lg overflow-hidden bg-gradient-to-br ${platform.color} flex items-center justify-center shrink-0 text-xl ${isComingSoon ? "grayscale" : ""}`}>
-                      {platform.logoImage ? (
+                    <div className={`w-10 h-10 rounded-lg overflow-hidden bg-gradient-to-br ${platform.color} flex items-center justify-center shrink-0 ${isComingSoon ? "grayscale" : ""}`}>
+                      {platform.id === "99food" ? (
+                        <div className="flex flex-col items-center justify-center text-black leading-none">
+                          <span className="text-xl font-bold">99</span>
+                          <span className="text-[8px] font-semibold">Food</span>
+                        </div>
+                      ) : platform.logoImage ? (
                         <img src={platform.logoImage} alt={platform.name} className="w-full h-full object-cover" />
                       ) : (
-                        platform.logo
+                        <span className="text-xl">{platform.logo}</span>
                       )}
                     </div>
                     {isComingSoon ? (
@@ -927,6 +947,11 @@ export default function AdminIntegrations() {
                     </div>
                   </div>
                 )}
+                {selectedPlatform.id === "99food" && (
+                  <div className="rounded-lg bg-blue-500/5 border border-blue-500/20 p-3 text-xs text-blue-700 dark:text-blue-300">
+                    A integração com 99food está em fase de homologação. Em breve estará disponível para todos os restaurantes.
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -960,7 +985,7 @@ export default function AdminIntegrations() {
               <Button variant="outline" onClick={() => setSelectedPlatform(null)}>
                 Cancelar
               </Button>
-              <Button onClick={handleConnect} disabled={saving}>
+              <Button onClick={handleConnect} disabled={saving || selectedPlatform?.id === "99food"}>
                 {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Plug className="w-4 h-4 mr-2" />}
                 {saving ? "Conectando..." : "Conectar"}
               </Button>
