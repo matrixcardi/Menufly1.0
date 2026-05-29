@@ -25,6 +25,7 @@ interface Collaborator {
   created_at: string;
   email?: string;
   full_name?: string;
+  cargo?: string;
 }
 
 export default function AdminCollaborators() {
@@ -32,6 +33,7 @@ export default function AdminCollaborators() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
+  const [cargo, setCargo] = useState("");
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [collaborators, setCollaborators] = useState<Collaborator[]>([]);
@@ -54,11 +56,11 @@ export default function AdminCollaborators() {
       .order("created_at", { ascending: false });
 
     if (data) {
-      // Fetch profiles for emails
+      // Fetch profiles for emails and cargo
       const userIds = data.map(c => c.user_id);
       const { data: profiles } = await supabase
         .from("profiles")
-        .select("id, email, full_name")
+        .select("id, email, full_name, raw_user_meta_data")
         .in("id", userIds);
 
       const enriched = data.map(c => {
@@ -67,6 +69,7 @@ export default function AdminCollaborators() {
           ...c,
           email: profile?.email || "—",
           full_name: profile?.full_name || undefined,
+          cargo: profile?.raw_user_meta_data?.cargo as string || undefined,
         };
       });
 
@@ -96,7 +99,7 @@ export default function AdminCollaborators() {
     setLoading(true);
     try {
       const response = await supabase.functions.invoke("create-collaborator", {
-        body: { email, password, full_name: fullName || undefined, restaurant_id: ctxRestaurantId },
+        body: { email, password, full_name: fullName || undefined, cargo: cargo || undefined, restaurant_id: ctxRestaurantId },
       });
 
       if (response.error) {
@@ -108,10 +111,14 @@ export default function AdminCollaborators() {
         throw new Error(result.error);
       }
 
-      toast({ title: "Sucesso!", description: result.message || "Colaborador criado." });
+      toast({
+        title: "Colaborador criado com sucesso!",
+        description: `Credenciais: Email: ${email} | Senha: ${password}`,
+      });
       setEmail("");
       setPassword("");
       setFullName("");
+      setCargo("");
       fetchCollaborators();
     } catch (error: any) {
       toast({ title: "Erro", description: error.message, variant: "destructive" });
@@ -186,6 +193,9 @@ export default function AdminCollaborators() {
               >
                 <div>
                   <p className="font-medium text-sm">{collab.full_name || collab.email}</p>
+                  {collab.cargo && (
+                    <p className="text-xs text-primary font-medium">{collab.cargo}</p>
+                  )}
                   {collab.full_name && (
                     <p className="text-xs text-muted-foreground">{collab.email}</p>
                   )}
@@ -218,13 +228,28 @@ export default function AdminCollaborators() {
         <CardContent>
           <ul className="space-y-2 text-sm text-muted-foreground">
             <li className="flex items-center gap-2">
-              <span className="text-destructive">✕</span> Alterar pedidos no relatório
+              <span className="text-destructive">✕</span> Acessar Configurações (entrega, pagamentos, impressora, etc)
             </li>
             <li className="flex items-center gap-2">
-              <span className="text-destructive">✕</span> Alterar método de pagamento
+              <span className="text-destructive">✕</span> Acessar CMV, Campanhas, CRM, IA Criativa
             </li>
             <li className="flex items-center gap-2">
-              <span className="text-destructive">✕</span> Alterar configurações de entrega
+              <span className="text-destructive">✕</span> Acessar FINANCEIRO (Visão Geral, DRE, Custos, Extrato)
+            </li>
+            <li className="flex items-center gap-2">
+              <span className="text-destructive">✕</span> Acessar GESTÃO (Estoque, Fornecedores, Lista de Compras, Agenda)
+            </li>
+            <li className="flex items-center gap-2">
+              <span className="text-destructive">✕</span> Editar Cardápio Digital, Produtos e Categorias, Promos
+            </li>
+            <li className="flex items-center gap-2">
+              <span className="text-green-600">✓</span> Acompanhar Pedidos
+            </li>
+            <li className="flex items-center gap-2">
+              <span className="text-green-600">✓</span> Visualizar Cardápio Digital (modo leitura)
+            </li>
+            <li className="flex items-center gap-2">
+              <span className="text-green-600">✓</span> Acessar Relatórios básicos
             </li>
           </ul>
         </CardContent>
@@ -245,7 +270,7 @@ export default function AdminCollaborators() {
           <CardContent>
             <form onSubmit={handleCreate} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="fullName">Nome (opcional)</Label>
+                <Label htmlFor="fullName">Nome completo *</Label>
                 <Input
                   id="fullName"
                   placeholder="Nome do colaborador"
@@ -253,6 +278,20 @@ export default function AdminCollaborators() {
                   onChange={(e) => setFullName(e.target.value)}
                   disabled={loading}
                   maxLength={100}
+                  required
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="cargo">Cargo/Função *</Label>
+                <Input
+                  id="cargo"
+                  placeholder="Ex: Caixa, Garçom, Cozinheiro"
+                  value={cargo}
+                  onChange={(e) => setCargo(e.target.value)}
+                  disabled={loading}
+                  maxLength={50}
+                  required
                 />
               </div>
 
@@ -270,7 +309,7 @@ export default function AdminCollaborators() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="password">Senha *</Label>
+                <Label htmlFor="password">Senha temporária *</Label>
                 <div className="relative">
                   <Input
                     id="password"

@@ -33,7 +33,7 @@ Deno.serve(async (req) => {
     }
 
     // Parse body
-    const { email, password, full_name, restaurant_id } = await req.json()
+    const { email, password, full_name, cargo, restaurant_id } = await req.json()
 
     if (!email || !password) {
       return new Response(JSON.stringify({ error: 'Email e senha são obrigatórios.' }), {
@@ -161,7 +161,10 @@ Deno.serve(async (req) => {
         email,
         password,
         email_confirm: true,
-        user_metadata: full_name ? { full_name } : undefined,
+        user_metadata: {
+          ...(full_name && { full_name }),
+          ...(cargo && { cargo }),
+        },
       })
 
       if (createError) {

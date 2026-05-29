@@ -9,17 +9,8 @@ import { useToast } from "@/hooks/use-toast";
 import { Loader2, User, Mail, Lock, MapPin, Store, CheckCircle, ArrowRight } from "lucide-react";
 import { motion } from "framer-motion";
 import { Logo } from "@/components/Logo";
-import { z } from "zod";
 import { logger } from "@/lib/logger";
-
-// Validation schema
-const accountSchema = z.object({
-  fullName: z.string().min(3, "Nome deve ter pelo menos 3 caracteres").max(100, "Nome muito longo"),
-  email: z.string().email("Email inválido").max(255, "Email muito longo"),
-  password: z.string().min(6, "Senha deve ter pelo menos 6 caracteres").max(100, "Senha muito longa"),
-  address: z.string().min(5, "Endereço deve ter pelo menos 5 caracteres").max(300, "Endereço muito longo"),
-  restaurantName: z.string().min(2, "Nome do restaurante deve ter pelo menos 2 caracteres").max(100, "Nome muito longo"),
-});
+import { validateEmail, validateName } from "@/lib/validations";
 
 export default function CreateAccount() {
   const navigate = useNavigate();
@@ -50,24 +41,43 @@ export default function CreateAccount() {
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
 
-    try {
-      accountSchema.parse({
-        fullName: formData.fullName,
-        email: formData.email,
-        password: formData.password,
-        address: formData.address,
-        restaurantName: formData.restaurantName,
-      });
-    } catch (err) {
-      if (err instanceof z.ZodError) {
-        err.errors.forEach((e) => {
-          if (e.path[0]) {
-            newErrors[e.path[0] as string] = e.message;
-          }
-        });
-      }
+    // Validate full name
+    const nameValidation = validateName(formData.fullName);
+    if (!nameValidation.valid) {
+      newErrors.fullName = nameValidation.error;
     }
 
+    // Validate email
+    const emailValidation = validateEmail(formData.email);
+    if (!emailValidation.valid) {
+      newErrors.email = emailValidation.error;
+    }
+
+    // Validate password
+    if (formData.password.length < 6) {
+      newErrors.password = "Senha deve ter pelo menos 6 caracteres";
+    }
+    if (formData.password.length > 100) {
+      newErrors.password = "Senha muito longa (máximo 100 caracteres)";
+    }
+
+    // Validate address
+    if (formData.address.length < 5) {
+      newErrors.address = "Endereço deve ter pelo menos 5 caracteres";
+    }
+    if (formData.address.length > 300) {
+      newErrors.address = "Endereço muito longo (máximo 300 caracteres)";
+    }
+
+    // Validate restaurant name
+    if (formData.restaurantName.length < 2) {
+      newErrors.restaurantName = "Nome do restaurante deve ter pelo menos 2 caracteres";
+    }
+    if (formData.restaurantName.length > 100) {
+      newErrors.restaurantName = "Nome muito longo (máximo 100 caracteres)";
+    }
+
+    // Validate password confirmation
     if (formData.password !== formData.confirmPassword) {
       newErrors.confirmPassword = "As senhas não coincidem";
     }

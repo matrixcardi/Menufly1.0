@@ -41,6 +41,7 @@ interface Account {
   created_at: string;
   restaurant_count: number;
   restaurant_names: string[];
+  role: string | null;
 }
 
 export default function MasterAccounts() {
@@ -50,6 +51,7 @@ export default function MasterAccounts() {
   const [editing, setEditing] = useState<Account | null>(null);
   const [editPlan, setEditPlan] = useState<string>("start");
   const [editStatus, setEditStatus] = useState<string>("trial");
+  const [editRole, setEditRole] = useState<string>("admin");
   const [saving, setSaving] = useState(false);
   const [syncing, setSyncing] = useState(false);
 
@@ -73,6 +75,12 @@ export default function MasterAccounts() {
 
       if (restaurantsError) throw restaurantsError;
 
+      const { data: userRoles, error: rolesError } = await supabase
+        .from("user_roles")
+        .select("user_id, role");
+
+      if (rolesError) throw rolesError;
+
       const restaurantsByUser = new Map<string, string[]>();
       restaurants?.forEach((r) => {
         const list = restaurantsByUser.get(r.user_id) || [];
@@ -80,10 +88,16 @@ export default function MasterAccounts() {
         restaurantsByUser.set(r.user_id, list);
       });
 
+      const rolesByUser = new Map<string, string>();
+      userRoles?.forEach((r) => {
+        rolesByUser.set(r.user_id, r.role);
+      });
+
       const enriched: Account[] = (profiles || []).map((p) => ({
         ...p,
         restaurant_count: restaurantsByUser.get(p.id)?.length || 0,
         restaurant_names: restaurantsByUser.get(p.id) || [],
+        role: rolesByUser.get(p.id) || null,
       }));
 
       setAccounts(enriched);
@@ -136,21 +150,45 @@ export default function MasterAccounts() {
     setEditing(acc);
     setEditPlan(acc.subscription_plan || "start");
     setEditStatus(acc.subscription_status || "trial");
+    setEditRole(acc.role || "admin");
   };
 
   const saveEdit = async () => {
     if (!editing) return;
     setSaving(true);
     try {
-      const { error } = await supabase.rpc("master_update_account" as any, {
-        p_user_id: editing.id,
-        p_plan: editPlan,
-        p_status: editStatus,
-        p_subscription_active: null,
-        p_trial_ends_at: null,
-      });
-      if (error) throw error;
-      toast({ title: "Conta atualizada", description: "Plano e status sincronizados." });
+      // Check if role already exists for this user
+      const { data: existingRole } = await supabase
+        .from("user_roles")
+        .select("id")
+        .eq("user_id", editing.id)
+        .maybeSingle();
+
+      // Update or insert role in user_roles
+      if (existingRole) {
+        const { error: roleError } = await supabase
+          .from("user_roles")
+          .update({ role: editRole })
+          .eq("user_id", editing.id);
+
+        if (roleError) throw roleError;
+      } else {
+        const { error: roleError } = await supabase
+          .from("user_roles")
+          .insert({ user_id: editing.id, role: editRole });
+
+        if (roleError) throw roleError;
+      }
+
+      // Update subscription_status in profiles
+      const { error: statusError } = await supabase
+        .from("profiles")
+        .update({ subscription_status: editStatus })
+        .eq("id", editing.id);
+
+      if (statusError) throw statusError;
+
+      toast({ title: "Conta atualizada", description: "Role e status alterados com sucesso." });
       setEditing(null);
       await fetchAccounts();
     } catch (err: any) {
@@ -258,54 +296,57 @@ export default function MasterAccounts() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Usuário</TableHead>
-                  <TableHead>Email</TableHead>
-                  <TableHead>Restaurante(s)</TableHead>
-                  <TableHead>Plano</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Cadastro</TableHead>
-                  <TableHead className="w-[80px]">Ações</TableHead>
+                  <TableHead className="w-[120px] text-xs">Usuário</TableHead>
+                  <TableHead className="min-w-[180px] text-xs">Email</TableHead>
+                  <TableHead className="w-[70px] text-xs">Role</TableHead>
+                  <TableHead className="w-[180px] text-xs">Restaurante(s)</TableHead>
+                  <TableHead className="w-[70px] text-xs">Plano</TableHead>
+                  <TableHead className="w-[70px] text-xs">Status</TableHead>
+                  <TableHead className="w-[60px] text-xs">Ações</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filtered.map((acc) => (
                   <TableRow key={acc.id}>
-                    <TableCell className="font-medium">
-                      {acc.full_name || <span className="text-muted-foreground italic">sem nome</span>}
+                    <TableCell className="font-medium text-xs">
+                      <span className="truncate block">{acc.full_name || <span className="text-muted-foreground italic">sem nome</span>}</span>
                     </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2 text-sm">
-                        <Mail className="h-3.5 w-3.5 text-muted-foreground" />
-                        {acc.email || "—"}
+                    <TableCell className="text-xs">
+                      <div className="flex items-center gap-1.5">
+                        <Mail className="h-3 w-3 text-muted-foreground shrink-0" />
+                        <span className="truncate">{acc.email || "—"}</span>
                       </div>
                     </TableCell>
-                    <TableCell>
-                      {acc.restaurant_count === 0 ? (
-                        <span className="text-muted-foreground text-sm">—</span>
+                    <TableCell className="text-xs">
+                      <Badge variant="outline" className="capitalize text-xs">
+                        {acc.role || "—"}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-xs">
+                      {acc.role === 'admin' ? (
+                        acc.restaurant_count === 0 ? (
+                          <span className="text-muted-foreground">—</span>
+                        ) : (
+                          <div className="flex items-center gap-1">
+                            <Store className="h-3 w-3 text-muted-foreground shrink-0" />
+                            <span className="truncate" title={acc.restaurant_names.join(", ")}>
+                              {acc.restaurant_names.join(", ")}
+                            </span>
+                          </div>
+                        )
                       ) : (
-                        <div className="flex items-center gap-1.5 text-sm">
-                          <Store className="h-3.5 w-3.5 text-muted-foreground" />
-                          <span className="truncate max-w-[200px]" title={acc.restaurant_names.join(", ")}>
-                            {acc.restaurant_names.join(", ")}
-                          </span>
-                        </div>
+                        <span className="text-muted-foreground">—</span>
                       )}
                     </TableCell>
-                    <TableCell>
-                      <Badge variant="outline" className="capitalize">
+                    <TableCell className="text-xs">
+                      <Badge variant="outline" className="capitalize text-xs">
                         {acc.subscription_plan || "—"}
                       </Badge>
                     </TableCell>
-                    <TableCell>{getStatusBadge(acc.subscription_status)}</TableCell>
+                    <TableCell className="text-xs">{getStatusBadge(acc.subscription_status)}</TableCell>
                     <TableCell>
-                      <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                        <Calendar className="h-3.5 w-3.5" />
-                        {new Date(acc.created_at).toLocaleDateString("pt-BR")}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Button size="icon" variant="ghost" onClick={() => openEdit(acc)}>
-                        <Pencil className="h-4 w-4" />
+                      <Button size="icon" variant="ghost" onClick={() => openEdit(acc)} className="h-7 w-7">
+                        <Pencil className="h-3.5 w-3.5" />
                       </Button>
                     </TableCell>
                   </TableRow>
@@ -325,18 +366,26 @@ export default function MasterAccounts() {
           <DialogHeader>
             <DialogTitle>Editar conta</DialogTitle>
             <DialogDescription>
-              {editing?.email} — alterações aplicam plano, status e sincronizam acesso de todas as unidades.
+              Altere a role e o status do usuário.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-2">
-              <Label>Plano</Label>
-              <Select value={editPlan} onValueChange={setEditPlan}>
+              <Label>Nome</Label>
+              <div className="text-sm font-medium">{editing?.full_name || "—"}</div>
+            </div>
+            <div className="space-y-2">
+              <Label>Email</Label>
+              <div className="text-sm text-muted-foreground">{editing?.email || "—"}</div>
+            </div>
+            <div className="space-y-2">
+              <Label>Role</Label>
+              <Select value={editRole} onValueChange={setEditRole}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="start">Start</SelectItem>
-                  <SelectItem value="elite">Elite</SelectItem>
-                  <SelectItem value="assessoria">Assessoria (interno · 5.000 créditos/mês)</SelectItem>
+                  <SelectItem value="admin">Admin</SelectItem>
+                  <SelectItem value="master">Master</SelectItem>
+                  <SelectItem value="collaborator">Colaborador</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -347,22 +396,16 @@ export default function MasterAccounts() {
                 <SelectContent>
                   <SelectItem value="active">Ativo</SelectItem>
                   <SelectItem value="trial">Trial</SelectItem>
-                  <SelectItem value="expired">Expirado</SelectItem>
-                  <SelectItem value="cancelled">Cancelado</SelectItem>
                   <SelectItem value="inactive">Inativo</SelectItem>
                 </SelectContent>
               </Select>
             </div>
-            <p className="text-xs text-muted-foreground">
-              Status <strong>Ativo</strong> ou <strong>Trial</strong> liberam o acesso. Ao salvar com plano Elite/Assessoria,
-              a recarga mensal de créditos é aplicada imediatamente.
-            </p>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditing(null)} disabled={saving}>Cancelar</Button>
             <Button onClick={saveEdit} disabled={saving}>
               {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              Salvar alterações
+              Salvar
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -128,6 +128,17 @@ Deno.serve(async (req) => {
       })
     }
 
+    // Create restaurant for admin user (only for admin role)
+    const { error: restaurantError } = await supabaseAdmin
+      .from('restaurants')
+      .insert({ user_id: userId, name: 'Meu Restaurante' })
+
+    if (restaurantError) {
+      return new Response(JSON.stringify({ error: 'Erro ao criar restaurante: ' + restaurantError.message }), {
+        status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+
     return new Response(JSON.stringify({ 
       success: true, 
       userId,

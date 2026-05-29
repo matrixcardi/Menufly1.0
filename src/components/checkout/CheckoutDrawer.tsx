@@ -1,6 +1,5 @@
 import { useState, useEffect } from "react";
 import { ArrowLeft, Shield } from "lucide-react";
-import { z } from "zod";
 import { supabase } from "@/integrations/supabase/client";
 import { trackInitiateCheckout } from "@/lib/meta-pixel";
 import { useCart } from "@/contexts/CartContext";
@@ -14,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { AddressDrawer } from "./AddressDrawer";
+import { validatePhone, validateName, formatPhone } from "@/lib/validations";
 
 interface CheckoutDrawerProps {
   open: boolean;
@@ -23,10 +23,6 @@ interface CheckoutDrawerProps {
   restaurantSlug?: string;
 }
 
-const identificationSchema = z.object({
-  phone: z.string().min(14, "Número de WhatsApp inválido").max(15),
-  name: z.string().trim().min(3, "Nome muito curto").max(100, "Nome muito longo"),
-});
 
 export function CheckoutDrawer({ open, onOpenChange, onBack, restaurantId, restaurantSlug }: CheckoutDrawerProps) {
   const [phone, setPhone] = useState("");
@@ -43,13 +39,6 @@ export function CheckoutDrawer({ open, onOpenChange, onBack, restaurantId, resta
     }
   }, [open]);
 
-  const formatPhone = (value: string) => {
-    const numbers = value.replace(/\D/g, "");
-    if (numbers.length <= 2) return `(${numbers}`;
-    if (numbers.length <= 7) return `(${numbers.slice(0, 2)}) ${numbers.slice(2)}`;
-    if (numbers.length <= 11) return `(${numbers.slice(0, 2)}) ${numbers.slice(2, 7)}-${numbers.slice(7)}`;
-    return `(${numbers.slice(0, 2)}) ${numbers.slice(2, 7)}-${numbers.slice(7, 11)}`;
-  };
 
   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const formatted = formatPhone(e.target.value);
@@ -65,14 +54,18 @@ export function CheckoutDrawer({ open, onOpenChange, onBack, restaurantId, resta
   };
 
   const handleSubmit = async () => {
-    const result = identificationSchema.safeParse({ phone, name });
+    const phoneValidation = validatePhone(phone);
+    const nameValidation = validateName(name);
     
-    if (!result.success) {
-      const fieldErrors: { phone?: string; name?: string } = {};
-      result.error.errors.forEach((err) => {
-        const field = err.path[0] as "phone" | "name";
-        fieldErrors[field] = err.message;
-      });
+    const fieldErrors: { phone?: string; name?: string } = {};
+    if (!phoneValidation.valid) {
+      fieldErrors.phone = phoneValidation.error;
+    }
+    if (!nameValidation.valid) {
+      fieldErrors.name = nameValidation.error;
+    }
+    
+    if (Object.keys(fieldErrors).length > 0) {
       setErrors(fieldErrors);
       return;
     }
@@ -103,7 +96,7 @@ export function CheckoutDrawer({ open, onOpenChange, onBack, restaurantId, resta
     setTimeout(() => onOpenChange(true), 300);
   };
 
-  const isValid = phone.length >= 14 && name.trim().length >= 3;
+  const isValid = validatePhone(phone).valid && validateName(name).valid;
 
   return (
     <>

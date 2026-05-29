@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
+import { useUserRole } from "@/hooks/useUserRole";
 import { getUserFriendlyError } from "@/lib/error-handler";
 import { logger } from "@/lib/logger";
 import {
@@ -36,6 +37,8 @@ interface Restaurant {
 
 export default function AdminMenu() {
   const { selectedRestaurantId, selectedRestaurantIds } = useRestaurantContext();
+  const { user } = useRestaurantContext();
+  const { isCollaborator } = useUserRole(user?.id);
   const ctxRestaurantId = selectedRestaurantId === "all" ? selectedRestaurantIds[0] : selectedRestaurantId;
   const [restaurant, setRestaurant] = useState<Restaurant | null>(null);
   const [loading, setLoading] = useState(true);
@@ -188,7 +191,7 @@ export default function AdminMenu() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold">Cardápio Digital</h1>
-          <p className="text-muted-foreground">Personalize a aparência do seu cardápio</p>
+          <p className="text-muted-foreground">{isCollaborator ? "Visualização do cardápio (modo leitura)" : "Personalize a aparência do seu cardápio"}</p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={() => window.open(`/${restaurant?.slug}`, "_blank")} className="gap-2 flex-1 sm:flex-initial" disabled={!restaurant}>
@@ -218,10 +221,12 @@ export default function AdminMenu() {
             <span className="hidden sm:inline">Exportar PDF</span>
             <span className="sm:hidden">PDF</span>
           </Button>
-          <Button size="sm" onClick={handleSave} disabled={saving} className="flex-1 sm:flex-initial">
-            {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
-            {saving ? "Salvando..." : "Salvar"}
-          </Button>
+          {!isCollaborator && (
+            <Button size="sm" onClick={handleSave} disabled={saving} className="flex-1 sm:flex-initial">
+              {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
+              {saving ? "Salvando..." : "Salvar"}
+            </Button>
+          )}
         </div>
       </div>
 
@@ -239,22 +244,24 @@ export default function AdminMenu() {
             {logoPreview ? (
               <div className="relative w-32 h-32 mx-auto">
                 <img src={logoPreview} alt="Logo" className="w-full h-full object-cover rounded-full border-4 border-muted" />
-                <button onClick={handleRemoveLogo} className="absolute -top-2 -right-2 p-1 bg-destructive text-destructive-foreground rounded-full hover:bg-destructive/90">
-                  <X className="w-4 h-4" />
-                </button>
+                {!isCollaborator && (
+                  <button onClick={handleRemoveLogo} className="absolute -top-2 -right-2 p-1 bg-destructive text-destructive-foreground rounded-full hover:bg-destructive/90">
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
               </div>
             ) : (
-              <div onClick={() => logoInputRef.current?.click()} className="w-32 h-32 mx-auto border-2 border-dashed border-muted-foreground/25 rounded-full flex flex-col items-center justify-center gap-2 cursor-pointer hover:border-primary/50 hover:bg-muted/50 transition-colors">
+              <div onClick={() => !isCollaborator && logoInputRef.current?.click()} className={`w-32 h-32 mx-auto border-2 border-dashed border-muted-foreground/25 rounded-full flex flex-col items-center justify-center gap-2 ${!isCollaborator ? 'cursor-pointer hover:border-primary/50 hover:bg-muted/50 transition-colors' : ''}`}>
                 {isUploadingLogo ? <Loader2 className="w-8 h-8 text-muted-foreground animate-spin" /> : (
                   <>
                     <Upload className="w-6 h-6 text-muted-foreground" />
-                    <span className="text-xs text-muted-foreground text-center">Upload logo</span>
+                    <span className="text-xs text-muted-foreground text-center">{isCollaborator ? 'Sem logo' : 'Upload logo'}</span>
                   </>
                 )}
               </div>
             )}
             <input ref={logoInputRef} type="file" accept="image/*" onChange={handleLogoChange} className="hidden" />
-            {logoPreview && (
+            {logoPreview && !isCollaborator && (
               <Button variant="outline" className="w-full" onClick={() => logoInputRef.current?.click()}>Trocar imagem</Button>
             )}
           </CardContent>
@@ -270,23 +277,27 @@ export default function AdminMenu() {
           </CardHeader>
           <CardContent className="space-y-4">
             <p className="text-sm text-muted-foreground">Um breve texto que aparecerá abaixo da foto de perfil no cardápio.</p>
-            <div className="space-y-2">
-              <Textarea
-                value={restaurant?.description || ""}
-                onChange={(e) => {
-                  const value = e.target.value.slice(0, 300);
-                  setRestaurant((prev) => prev ? { ...prev, description: value } : null);
-                }}
-                placeholder="Ex: Hambúrgueres artesanais feitos com ingredientes selecionados. Delivery e retirada disponíveis!"
-                className="min-h-[100px] resize-none"
-                maxLength={300}
-              />
-              <div className="flex justify-end">
-                <span className={`text-xs ${(restaurant?.description?.length || 0) >= 280 ? 'text-amber-500' : 'text-muted-foreground'}`}>
-                  {restaurant?.description?.length || 0}/300
-                </span>
+            {isCollaborator ? (
+              <p className="text-sm">{restaurant?.description || "Sem descrição"}</p>
+            ) : (
+              <div className="space-y-2">
+                <Textarea
+                  value={restaurant?.description || ""}
+                  onChange={(e) => {
+                    const value = e.target.value.slice(0, 300);
+                    setRestaurant((prev) => prev ? { ...prev, description: value } : null);
+                  }}
+                  placeholder="Ex: Hambúrgueres artesanais feitos com ingredientes selecionados. Delivery e retirada disponíveis!"
+                  className="min-h-[100px] resize-none"
+                  maxLength={300}
+                />
+                <div className="flex justify-end">
+                  <span className={`text-xs ${(restaurant?.description?.length || 0) >= 280 ? 'text-amber-500' : 'text-muted-foreground'}`}>
+                    {restaurant?.description?.length || 0}/300
+                  </span>
+                </div>
               </div>
-            </div>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -305,33 +316,48 @@ export default function AdminMenu() {
             {bannerPreview ? (
               <div className="relative w-full h-32">
                 <img src={bannerPreview} alt="Banner" className="w-full h-full object-cover rounded-lg border" />
-                <button onClick={handleRemoveBanner} className="absolute top-2 right-2 p-1 bg-destructive text-destructive-foreground rounded-full hover:bg-destructive/90">
-                  <X className="w-4 h-4" />
-                </button>
+                {!isCollaborator && (
+                  <button onClick={handleRemoveBanner} className="absolute top-2 right-2 p-1 bg-destructive text-destructive-foreground rounded-full hover:bg-destructive/90">
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
               </div>
             ) : (
-              <div onClick={() => bannerInputRef.current?.click()} className="w-full h-32 border-2 border-dashed border-muted-foreground/25 rounded-lg flex flex-col items-center justify-center gap-2 cursor-pointer hover:border-primary/50 hover:bg-muted/50 transition-colors">
+              <div onClick={() => !isCollaborator && bannerInputRef.current?.click()} className={`w-full h-32 border-2 border-dashed border-muted-foreground/25 rounded-lg flex flex-col items-center justify-center gap-2 ${!isCollaborator ? 'cursor-pointer hover:border-primary/50 hover:bg-muted/50 transition-colors' : ''}`}>
                 {isUploadingBanner ? <Loader2 className="w-8 h-8 text-muted-foreground animate-spin" /> : (
                   <>
                     <Upload className="w-6 h-6 text-muted-foreground" />
-                    <span className="text-sm text-muted-foreground">Upload banner</span>
+                    <span className="text-sm text-muted-foreground">{isCollaborator ? 'Sem banner' : 'Upload banner'}</span>
                   </>
                 )}
               </div>
             )}
             <input ref={bannerInputRef} type="file" accept="image/*" onChange={handleBannerChange} className="hidden" />
-            {bannerPreview && (
+            {bannerPreview && !isCollaborator && (
               <Button variant="outline" className="w-full" onClick={() => bannerInputRef.current?.click()}>Trocar imagem</Button>
             )}
           </CardContent>
         </Card>
 
         {/* Highlights Section */}
-        {restaurant && <MenuHighlightsSection restaurantId={restaurant.id} />}
+        {restaurant && !isCollaborator && <MenuHighlightsSection restaurantId={restaurant.id} />}
+        {restaurant && isCollaborator && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <FileText className="w-5 h-5" />
+                Destaques do Cardápio
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground">Visualização apenas. Edição não disponível para colaboradores.</p>
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       {/* Menu Theme */}
-      {restaurant && (
+      {restaurant && !isCollaborator && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -392,6 +418,19 @@ export default function AdminMenu() {
                 )}
               </button>
             </div>
+          </CardContent>
+        </Card>
+      )}
+      {restaurant && isCollaborator && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Palette className="w-5 h-5" />
+              Tema do Cardápio
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground">Tema atual: {restaurant.menu_theme === 'dark' ? 'Dark Mode' : 'Clean Mode'}</p>
           </CardContent>
         </Card>
       )}

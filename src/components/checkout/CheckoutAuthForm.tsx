@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Mail, Lock, Loader2, User } from "lucide-react";
 import { toast } from "sonner";
+import { validateEmail, validateName } from "@/lib/validations";
 
 interface CheckoutAuthFormProps {
   onAuthenticated: () => void;
@@ -16,18 +17,35 @@ export default function CheckoutAuthForm({ onAuthenticated }: CheckoutAuthFormPr
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
   const [loading, setLoading] = useState(false);
+  const [errors, setErrors] = useState<{ email?: string; fullName?: string }>({});
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Validate fields
+    const fieldErrors: { email?: string; fullName?: string } = {};
+    
+    const emailValidation = validateEmail(email);
+    if (!emailValidation.valid) {
+      fieldErrors.email = emailValidation.error;
+    }
+
+    if (mode === "signup") {
+      const nameValidation = validateName(fullName);
+      if (!nameValidation.valid) {
+        fieldErrors.fullName = nameValidation.error;
+      }
+    }
+
+    if (Object.keys(fieldErrors).length > 0) {
+      setErrors(fieldErrors);
+      return;
+    }
+
     setLoading(true);
 
     try {
       if (mode === "signup") {
-        if (!fullName.trim()) {
-          toast.error("Informe seu nome completo.");
-          setLoading(false);
-          return;
-        }
         const { error } = await supabase.auth.signUp({
           email,
           password,
@@ -81,11 +99,17 @@ export default function CheckoutAuthForm({ onAuthenticated }: CheckoutAuthFormPr
                 type="text"
                 placeholder="Seu nome"
                 value={fullName}
-                onChange={(e) => setFullName(e.target.value)}
-                className="pl-9 h-10 rounded-xl"
+                onChange={(e) => {
+                  setFullName(e.target.value);
+                  setErrors(prev => ({ ...prev, fullName: undefined }));
+                }}
+                className={`pl-9 h-10 rounded-xl ${errors.fullName ? "border-destructive" : ""}`}
                 required
               />
             </div>
+            {errors.fullName && (
+              <p className="text-xs text-destructive">{errors.fullName}</p>
+            )}
           </div>
         )}
 
@@ -98,11 +122,17 @@ export default function CheckoutAuthForm({ onAuthenticated }: CheckoutAuthFormPr
               type="email"
               placeholder="seu@email.com"
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="pl-9 h-10 rounded-xl"
+              onChange={(e) => {
+                setEmail(e.target.value);
+                setErrors(prev => ({ ...prev, email: undefined }));
+              }}
+              className={`pl-9 h-10 rounded-xl ${errors.email ? "border-destructive" : ""}`}
               required
             />
           </div>
+          {errors.email && (
+            <p className="text-xs text-destructive">{errors.email}</p>
+          )}
         </div>
 
         <div className="space-y-1.5">

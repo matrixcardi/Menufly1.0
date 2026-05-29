@@ -103,45 +103,45 @@ import { Label } from "@/components/ui/label";
 const ordersItem = { title: "Acompanhar Pedidos", url: "/admin/pedidos", icon: ClipboardList };
 
 const navItems = [
-  { title: "Relatórios", url: "/admin/relatorios", icon: BarChart3, restrictCollaborator: true },
+  { title: "Relatórios", url: "/admin/relatorios", icon: BarChart3 },
   { title: "CMV", url: "/admin/cmv", icon: DollarSign, restrictCollaborator: true },
-  { title: "CRM", url: "/admin/crm", icon: Users },
-  { title: "IA Criativa", url: "/admin/ia", icon: Sparkles },
-  { title: "Campanhas", url: "/admin/campanhas", icon: MessageCircle, isWhatsapp: true },
+  { title: "CRM", url: "/admin/crm", icon: Users, restrictCollaborator: true },
+  { title: "IA Criativa", url: "/admin/ia", icon: Sparkles, restrictCollaborator: true },
+  { title: "Campanhas", url: "/admin/campanhas", icon: MessageCircle, isWhatsapp: true, restrictCollaborator: true },
   { title: "WhatsApp Bot", url: "/admin/whatsapp-bot", icon: Bot, isBot: true, requiresElite: true },
 ];
 
 const menuItems = [
   { title: "Cardápio Digital", url: "/admin/cardapio", icon: Utensils },
-  { title: "Produtos e Categorias", url: "/admin/produtos", icon: Package },
-  { title: "Promos", url: "/admin/promos", icon: Tag },
+  { title: "Produtos e Categorias", url: "/admin/produtos", icon: Package, restrictCollaborator: true },
+  { title: "Promos", url: "/admin/promos", icon: Tag, restrictCollaborator: true },
 ];
 
 const financeiroItems = [
-  { title: "Visão Geral", url: "/admin/bi-financeiro", icon: BarChart3 },
-  { title: "DRE", url: "/admin/dre", icon: DollarSign },
-  { title: "Custos de Insumos", url: "/admin/custos-insumos", icon: Package },
-  { title: "Extrato de Pedidos", url: "/admin/extrato-pedidos", icon: ClipboardList },
+  { title: "Visão Geral", url: "/admin/bi-financeiro", icon: BarChart3, restrictCollaborator: true },
+  { title: "DRE", url: "/admin/dre", icon: DollarSign, restrictCollaborator: true },
+  { title: "Custos de Insumos", url: "/admin/custos-insumos", icon: Package, restrictCollaborator: true },
+  { title: "Extrato de Pedidos", url: "/admin/extrato-pedidos", icon: ClipboardList, restrictCollaborator: true },
 ];
 
 const managementItems = [
-  { title: "Estoque", url: "/admin/estoque", icon: Box },
-  { title: "Fornecedores", url: "/admin/fornecedores", icon: Building2 },
-  { title: "Lista de Compras", url: "/admin/lista-compras", icon: ClipboardList },
-  { title: "Agenda do Dia", url: "/admin/agenda-dia", icon: Calendar },
+  { title: "Estoque", url: "/admin/estoque", icon: Box, restrictCollaborator: true },
+  { title: "Fornecedores", url: "/admin/fornecedores", icon: Building2, restrictCollaborator: true },
+  { title: "Lista de Compras", url: "/admin/lista-compras", icon: ClipboardList, restrictCollaborator: true },
+  { title: "Agenda do Dia", url: "/admin/agenda-dia", icon: Calendar, restrictCollaborator: true },
 ];
 
 const settingsItems = [
   { title: "Entrega", url: "/admin/entrega", icon: Truck, restrictCollaborator: true },
-  { title: "Entregadores", url: "/admin/entregadores", icon: Bike },
+  { title: "Entregadores", url: "/admin/entregadores", icon: Bike, restrictCollaborator: true },
   { title: "Pagamentos", url: "/admin/pagamentos", icon: CreditCard, restrictCollaborator: true },
   { title: "Minha Assinatura", url: "/admin/assinatura", icon: Crown, restrictCollaborator: true },
-  { title: "ADS", url: "/admin/ads", icon: Megaphone },
-  { title: "Meu Negócio", url: "/admin/negocio", icon: Store },
-  { title: "Impressora", url: "/admin/impressora", icon: Printer },
+  { title: "ADS", url: "/admin/ads", icon: Megaphone, restrictCollaborator: true },
+  { title: "Meu Negócio", url: "/admin/negocio", icon: Store, restrictCollaborator: true },
+  { title: "Impressora", url: "/admin/impressora", icon: Printer, restrictCollaborator: true },
   { title: "Colaboradores", url: "/admin/colaboradores", icon: Users, restrictCollaborator: true },
-  { title: "Integrações", url: "/admin/integracoes", icon: Plug },
-  { title: "Agendamento", url: "/admin/agendamento", icon: Calendar },
+  { title: "Integrações", url: "/admin/integracoes", icon: Plug, restrictCollaborator: true },
+  { title: "Agendamento", url: "/admin/agendamento", icon: Calendar, restrictCollaborator: true },
 ];
 
 interface RestaurantCardProps {
@@ -245,13 +245,16 @@ function AdminSidebar({ pendingOrdersCount, isCollaborator, canAccessWhatsAppBot
   const location = useLocation();
   const navigate = useNavigate();
   const { selectedRestaurant, restaurants } = useRestaurantContext();
-  
+
   let filteredNavItems = isCollaborator ? navItems.filter(i => !('restrictCollaborator' in i && i.restrictCollaborator)) : navItems;
   if (!canAccessWhatsAppBot) {
     filteredNavItems = filteredNavItems.filter(i => !('requiresElite' in i && i.requiresElite));
   }
   const filteredSettingsItems = isCollaborator ? settingsItems.filter(i => !('restrictCollaborator' in i && i.restrictCollaborator)) : settingsItems;
-  const menuActive = menuItems.some((item) => location.pathname === item.url);
+  const filteredFinanceiroItems = isCollaborator ? financeiroItems.filter(i => !('restrictCollaborator' in i && i.restrictCollaborator)) : financeiroItems;
+  const filteredManagementItems = isCollaborator ? managementItems.filter(i => !('restrictCollaborator' in i && i.restrictCollaborator)) : managementItems;
+  const filteredMenuItems = isCollaborator ? menuItems.filter(i => !('restrictCollaborator' in i && i.restrictCollaborator)) : menuItems;
+  const menuActive = filteredMenuItems.some((item) => location.pathname === item.url);
   const [menuOpen, setMenuOpen] = useState(menuActive);
   const settingsActive = filteredSettingsItems.some((item) => location.pathname === item.url);
   const [settingsOpen, setSettingsOpen] = useState(settingsActive);
@@ -347,7 +350,7 @@ function AdminSidebar({ pendingOrdersCount, isCollaborator, canAccessWhatsAppBot
             <CollapsibleContent>
               <SidebarGroupContent>
                 <SidebarMenu>
-                  {menuItems.map((item) => (
+                  {filteredMenuItems.map((item) => (
                     <SidebarMenuItem key={item.title}>
                       <SidebarMenuButton asChild>
                         <NavLink
@@ -374,7 +377,7 @@ function AdminSidebar({ pendingOrdersCount, isCollaborator, canAccessWhatsAppBot
           </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {financeiroItems.map((item) => (
+              {filteredFinanceiroItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild>
                     <NavLink
@@ -399,7 +402,7 @@ function AdminSidebar({ pendingOrdersCount, isCollaborator, canAccessWhatsAppBot
           </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {managementItems.map((item) => (
+              {filteredManagementItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild>
                     <NavLink
@@ -674,7 +677,32 @@ function AdminLayoutInner() {
   // Redirect collaborators from restricted routes
   useEffect(() => {
     if (!isCollaborator || !user) return;
-    const restricted = ["/admin/relatorios", "/admin/pagamentos", "/admin/entrega", "/admin/colaboradores"];
+    const restricted = [
+      "/admin/cmv",
+      "/admin/crm",
+      "/admin/ia",
+      "/admin/campanhas",
+      "/admin/bi-financeiro",
+      "/admin/dre",
+      "/admin/custos-insumos",
+      "/admin/extrato-pedidos",
+      "/admin/estoque",
+      "/admin/fornecedores",
+      "/admin/lista-compras",
+      "/admin/agenda-dia",
+      "/admin/entrega",
+      "/admin/entregadores",
+      "/admin/pagamentos",
+      "/admin/assinatura",
+      "/admin/ads",
+      "/admin/negocio",
+      "/admin/impressora",
+      "/admin/colaboradores",
+      "/admin/integracoes",
+      "/admin/agendamento",
+      "/admin/produtos",
+      "/admin/promos",
+    ];
     if (restricted.some(r => location.pathname.startsWith(r))) {
       navigate("/admin");
       toast({ title: "Acesso restrito", description: "Você não tem permissão para acessar esta página.", variant: "destructive" });

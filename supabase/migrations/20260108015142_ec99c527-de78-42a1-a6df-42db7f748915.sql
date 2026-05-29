@@ -165,9 +165,8 @@ BEGIN
   INSERT INTO public.profiles (id, email, full_name)
   VALUES (new.id, new.email, new.raw_user_meta_data ->> 'full_name');
   
-  -- Create a default restaurant for the new user
-  INSERT INTO public.restaurants (user_id, name)
-  VALUES (new.id, 'Meu Restaurante');
+  -- Do NOT create a restaurant automatically
+  -- Restaurants are only created for admin users via the create-admin-user function
   
   RETURN new;
 END;

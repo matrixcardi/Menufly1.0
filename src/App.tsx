@@ -1,9 +1,9 @@
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, useNavigate, useLocation } from "react-router-dom";
 import { CartProvider } from "@/contexts/CartContext";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { ForceTheme } from "@/components/ForceTheme";
@@ -64,6 +64,29 @@ const AdminAgendaDia = lazy(() => import("./pages/admin/AdminAgendaDia"));
 
 const queryClient = new QueryClient();
 
+// Component to handle password reset redirect from email links
+const PasswordResetHandler = ({ children }: { children: React.ReactNode }) => {
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  useEffect(() => {
+    // Check if URL contains password recovery token
+    const hash = location.hash;
+    if (hash) {
+      const params = new URLSearchParams(hash.substring(1));
+      const accessToken = params.get("access_token");
+      const type = params.get("type");
+
+      if (accessToken && type === "recovery") {
+        // Redirect to reset password page
+        navigate("/admin/reset-password", { replace: true });
+      }
+    }
+  }, [location, navigate]);
+
+  return <>{children}</>;
+};
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false}>
@@ -73,6 +96,7 @@ const App = () => (
           <Sonner />
         <BrowserRouter>
           <Suspense fallback={null}>
+          <PasswordResetHandler>
           <Routes>
             {/* Landing Page */}
             <Route path="/" element={<ForceTheme theme="light"><LandingPage /></ForceTheme>} />
@@ -142,6 +166,7 @@ const App = () => (
             
             <Route path="*" element={<NotFound />} />
           </Routes>
+          </PasswordResetHandler>
           </Suspense>
           </BrowserRouter>
         </TooltipProvider>
