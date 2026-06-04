@@ -76,6 +76,10 @@ import {
   Plug,
   Link2,
   Calendar,
+  ShoppingCart,
+  Armchair,
+  Plus,
+  X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -98,16 +102,19 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { usePDVKiosk } from "@/contexts/PDVKioskContext";
 
 // Pedidos separado para ficar em destaque
 const ordersItem = { title: "Acompanhar Pedidos", url: "/admin/pedidos", icon: ClipboardList };
 
+// Salão - unifica PDV e Mesas
+const salaoItem = { title: "Salão", url: "/admin/salao", icon: ShoppingCart };
+
 const navItems = [
-  { title: "Relatórios", url: "/admin/relatorios", icon: BarChart3 },
-  { title: "CMV", url: "/admin/cmv", icon: DollarSign, restrictCollaborator: true },
   { title: "CRM", url: "/admin/crm", icon: Users, restrictCollaborator: true },
   { title: "IA Criativa", url: "/admin/ia", icon: Sparkles, restrictCollaborator: true },
   { title: "Campanhas", url: "/admin/campanhas", icon: MessageCircle, isWhatsapp: true, restrictCollaborator: true },
+  { title: "ADS", url: "/admin/ads", icon: Megaphone, restrictCollaborator: true },
   { title: "WhatsApp Bot", url: "/admin/whatsapp-bot", icon: Bot, isBot: true, requiresElite: true },
 ];
 
@@ -122,13 +129,16 @@ const financeiroItems = [
   { title: "DRE", url: "/admin/dre", icon: DollarSign, restrictCollaborator: true },
   { title: "Custos de Insumos", url: "/admin/custos-insumos", icon: Package, restrictCollaborator: true },
   { title: "Extrato de Pedidos", url: "/admin/extrato-pedidos", icon: ClipboardList, restrictCollaborator: true },
+  { title: "Relatórios", url: "/admin/relatorios", icon: BarChart3 },
+  { title: "CMV", url: "/admin/cmv", icon: DollarSign, restrictCollaborator: true },
 ];
 
 const managementItems = [
-  { title: "Estoque", url: "/admin/estoque", icon: Box, restrictCollaborator: true },
+  { title: "Estoque & Movimentações", url: "/admin/estoque", icon: Box, restrictCollaborator: true },
   { title: "Fornecedores", url: "/admin/fornecedores", icon: Building2, restrictCollaborator: true },
   { title: "Lista de Compras", url: "/admin/lista-compras", icon: ClipboardList, restrictCollaborator: true },
   { title: "Agenda do Dia", url: "/admin/agenda-dia", icon: Calendar, restrictCollaborator: true },
+  { title: "Agendamento", url: "/admin/agendamento", icon: Calendar, restrictCollaborator: true },
 ];
 
 const settingsItems = [
@@ -136,12 +146,10 @@ const settingsItems = [
   { title: "Entregadores", url: "/admin/entregadores", icon: Bike, restrictCollaborator: true },
   { title: "Pagamentos", url: "/admin/pagamentos", icon: CreditCard, restrictCollaborator: true },
   { title: "Minha Assinatura", url: "/admin/assinatura", icon: Crown, restrictCollaborator: true },
-  { title: "ADS", url: "/admin/ads", icon: Megaphone, restrictCollaborator: true },
   { title: "Meu Negócio", url: "/admin/negocio", icon: Store, restrictCollaborator: true },
   { title: "Impressora", url: "/admin/impressora", icon: Printer, restrictCollaborator: true },
   { title: "Colaboradores", url: "/admin/colaboradores", icon: Users, restrictCollaborator: true },
   { title: "Integrações", url: "/admin/integracoes", icon: Plug, restrictCollaborator: true },
-  { title: "Agendamento", url: "/admin/agendamento", icon: Calendar, restrictCollaborator: true },
 ];
 
 interface RestaurantCardProps {
@@ -152,9 +160,13 @@ function RestaurantCard({ restaurant }: RestaurantCardProps) {
   const [copied, setCopied] = useState(false);
   const { toast } = useToast();
 
-  if (!restaurant) return null;
+  // Show default restaurant card even if restaurant is null (for new users)
+  const restaurantName = restaurant?.name || "Meu Restaurante";
+  const restaurantSlug = restaurant?.slug || "";
+  const restaurantLogo = restaurant?.logo_url || undefined;
+  const restaurantIsOpen = restaurant?.is_open || false;
 
-  const menuLink = `${window.location.origin}/${restaurant.slug}`;
+  const menuLink = restaurantSlug ? `${window.location.origin}/${restaurantSlug}` : "#";
 
   const handleCopyLink = async () => {
     try {
@@ -171,18 +183,18 @@ function RestaurantCard({ restaurant }: RestaurantCardProps) {
     <div className="p-3 mx-2 mb-2 rounded-2xl bg-white/10 dark:bg-white/5 border border-white/15 dark:border-white/10 backdrop-blur-xl">
       <div className="flex items-center gap-3 mb-3">
         <Avatar className="h-10 w-10 ring-2 ring-primary/10 ring-offset-2 ring-offset-background">
-          <AvatarImage src={restaurant.logo_url || undefined} alt={restaurant.name} />
+          <AvatarImage src={restaurantLogo} alt={restaurantName} />
           <AvatarFallback className="bg-primary/10 text-primary font-semibold text-sm">
-            {restaurant.name.substring(0, 2).toUpperCase()}
+            {restaurantName.substring(0, 2).toUpperCase()}
           </AvatarFallback>
         </Avatar>
         <div className="flex-1 min-w-0">
-          <p className="font-semibold text-sm truncate">{restaurant.name}</p>
+          <p className="font-semibold text-sm truncate">{restaurantName}</p>
           <Badge 
-            variant={restaurant.is_open ? "default" : "secondary"}
-            className={`text-xs rounded-full ${restaurant.is_open ? 'bg-accent text-accent-foreground' : ''}`}
+            variant={restaurantIsOpen ? "default" : "secondary"}
+            className={`text-xs rounded-full ${restaurantIsOpen ? 'bg-accent text-accent-foreground' : ''}`}
           >
-            {restaurant.is_open ? "Aberto" : "Fechado"}
+            {restaurantIsOpen ? "Aberto" : "Fechado"}
           </Badge>
         </div>
       </div>
@@ -193,10 +205,10 @@ function RestaurantCard({ restaurant }: RestaurantCardProps) {
           <div className="flex-1 bg-background/60 backdrop-blur-sm rounded-xl px-2.5 py-1.5 text-xs text-muted-foreground truncate border border-border/50">
             {menuLink}
           </div>
-          <Button variant="outline" size="icon" className="h-8 w-8 shrink-0 rounded-xl" onClick={handleCopyLink}>
+          <Button variant="outline" size="icon" className="h-8 w-8 shrink-0 rounded-xl" onClick={handleCopyLink} disabled={!restaurantSlug}>
             {copied ? <Check className="h-3.5 w-3.5 text-accent" /> : <Copy className="h-3.5 w-3.5" />}
           </Button>
-          <Button variant="outline" size="icon" className="h-8 w-8 shrink-0 rounded-xl" onClick={() => window.open(menuLink, '_blank')}>
+          <Button variant="outline" size="icon" className="h-8 w-8 shrink-0 rounded-xl" onClick={() => window.open(menuLink, '_blank')} disabled={!restaurantSlug}>
             <Eye className="h-3.5 w-3.5" />
           </Button>
         </div>
@@ -256,6 +268,10 @@ function AdminSidebar({ pendingOrdersCount, isCollaborator, canAccessWhatsAppBot
   const filteredMenuItems = isCollaborator ? menuItems.filter(i => !('restrictCollaborator' in i && i.restrictCollaborator)) : menuItems;
   const menuActive = filteredMenuItems.some((item) => location.pathname === item.url);
   const [menuOpen, setMenuOpen] = useState(menuActive);
+  const financeiroActive = filteredFinanceiroItems.some((item) => location.pathname === item.url);
+  const [financeiroOpen, setFinanceiroOpen] = useState(financeiroActive);
+  const managementActive = filteredManagementItems.some((item) => location.pathname === item.url);
+  const [managementOpen, setManagementOpen] = useState(managementActive);
   const settingsActive = filteredSettingsItems.some((item) => location.pathname === item.url);
   const [settingsOpen, setSettingsOpen] = useState(settingsActive);
   
@@ -274,8 +290,23 @@ function AdminSidebar({ pendingOrdersCount, isCollaborator, canAccessWhatsAppBot
       </SidebarHeader>
 
       <SidebarContent className="p-2">
-        {/* Restaurant Selector */}
-        <RestaurantSelector />
+        {/* Restaurant Selector - only for master users */}
+        {isMaster && <RestaurantSelector />}
+
+        {/* Salão - Unifica PDV e Mesas */}
+        <div className="mb-4 px-1">
+          <button
+            onClick={() => window.location.href = salaoItem.url}
+            className="flex items-center gap-3 px-3 py-3 rounded-2xl bg-orange-500/10 border border-orange-500/20 hover:bg-orange-500/20 transition-all duration-300 w-full text-left"
+          >
+            <div className="w-10 h-10 bg-orange-500/20 rounded-xl flex items-center justify-center">
+              <ShoppingCart className="w-5 h-5" />
+            </div>
+            <div className="flex-1">
+              <span className="font-semibold text-sm">{salaoItem.title}</span>
+            </div>
+          </button>
+        </div>
 
         {/* Pedidos - Fixado e em destaque */}
         <div className="mb-4 px-1">
@@ -340,10 +371,7 @@ function AdminSidebar({ pendingOrdersCount, isCollaborator, canAccessWhatsAppBot
           <Collapsible open={menuOpen} onOpenChange={setMenuOpen}>
             <CollapsibleTrigger className="w-full">
               <SidebarGroupLabel className="flex items-center justify-between cursor-pointer hover:text-foreground transition-all duration-200 w-full text-xs font-semibold uppercase tracking-wider text-muted-foreground/70 px-3">
-                <span className="flex items-center gap-2">
-                  <Utensils className="w-3.5 h-3.5" />
-                  Cardápio Digital
-                </span>
+                <span>Cardápio Digital</span>
                 <ChevronRight className={`w-3.5 h-3.5 transition-transform duration-300 ${menuOpen ? 'rotate-90' : ''}`} />
               </SidebarGroupLabel>
             </CollapsibleTrigger>
@@ -372,52 +400,66 @@ function AdminSidebar({ pendingOrdersCount, isCollaborator, canAccessWhatsAppBot
 
         {/* FINANCEIRO */}
         <SidebarGroup>
-          <SidebarGroupLabel className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/70 px-3">
-            FINANCEIRO
-          </SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {filteredFinanceiroItems.map((item) => (
-                <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton asChild>
-                    <NavLink
-                      to={item.url}
-                      className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-secondary/80 transition-all duration-200"
-                      activeClassName="bg-primary/10 text-primary font-medium shadow-apple-sm"
-                    >
-                      <item.icon className="w-4.5 h-4.5" />
-                      <span className="flex-1 text-sm">{item.title}</span>
-                    </NavLink>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
+          <Collapsible open={financeiroOpen} onOpenChange={setFinanceiroOpen}>
+            <CollapsibleTrigger className="w-full">
+              <SidebarGroupLabel className="flex items-center justify-between cursor-pointer hover:text-foreground transition-all duration-200 w-full text-xs font-semibold uppercase tracking-wider text-muted-foreground/70 px-3">
+                <span>FINANCEIRO</span>
+                <ChevronRight className={`w-3.5 h-3.5 transition-transform duration-300 ${financeiroOpen ? 'rotate-90' : ''}`} />
+              </SidebarGroupLabel>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {filteredFinanceiroItems.map((item) => (
+                    <SidebarMenuItem key={item.title}>
+                      <SidebarMenuButton asChild>
+                        <NavLink
+                          to={item.url}
+                          className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-secondary/80 transition-all duration-200"
+                          activeClassName="bg-primary/10 text-primary font-medium shadow-apple-sm"
+                        >
+                          <item.icon className="w-4.5 h-4.5" />
+                          <span className="flex-1 text-sm">{item.title}</span>
+                        </NavLink>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  ))}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </CollapsibleContent>
+          </Collapsible>
         </SidebarGroup>
 
         {/* Gestão */}
         <SidebarGroup>
-          <SidebarGroupLabel className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/70 px-3">
-            GESTÃO
-          </SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {filteredManagementItems.map((item) => (
-                <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton asChild>
-                    <NavLink
-                      to={item.url}
-                      className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-secondary/80 transition-all duration-200"
-                      activeClassName="bg-primary/10 text-primary font-medium shadow-apple-sm"
-                    >
-                      <item.icon className="w-4.5 h-4.5" />
-                      <span className="flex-1 text-sm">{item.title}</span>
-                    </NavLink>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
+          <Collapsible open={managementOpen} onOpenChange={setManagementOpen}>
+            <CollapsibleTrigger className="w-full">
+              <SidebarGroupLabel className="flex items-center justify-between cursor-pointer hover:text-foreground transition-all duration-200 w-full text-xs font-semibold uppercase tracking-wider text-muted-foreground/70 px-3">
+                <span>GESTÃO</span>
+                <ChevronRight className={`w-3.5 h-3.5 transition-transform duration-300 ${managementOpen ? 'rotate-90' : ''}`} />
+              </SidebarGroupLabel>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {filteredManagementItems.map((item) => (
+                    <SidebarMenuItem key={item.title}>
+                      <SidebarMenuButton asChild>
+                        <NavLink
+                          to={item.url}
+                          className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-secondary/80 transition-all duration-200"
+                          activeClassName="bg-primary/10 text-primary font-medium shadow-apple-sm"
+                        >
+                          <item.icon className="w-4.5 h-4.5" />
+                          <span className="flex-1 text-sm">{item.title}</span>
+                        </NavLink>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  ))}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </CollapsibleContent>
+          </Collapsible>
         </SidebarGroup>
 
         {/* Configurações - Collapsible */}
@@ -501,8 +543,30 @@ interface BusinessHour {
 
 function isWithinBusinessHours(hours: BusinessHour[]): boolean {
   const now = new Date();
-  const currentDay = now.getDay();
-  const currentTime = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', hour12: false });
+  const currentTimeInBrasilia = now.toLocaleTimeString('pt-BR', {
+    timeZone: 'America/Sao_Paulo',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  });
+  const currentDayInBrasilia = now.toLocaleDateString('pt-BR', {
+    timeZone: 'America/Sao_Paulo',
+    weekday: 'long'
+  });
+  
+  // Convert day name to number (0 = Sunday, 6 = Saturday)
+  const dayNameToNumber: Record<string, number> = {
+    'domingo': 0,
+    'segunda-feira': 1,
+    'terça-feira': 2,
+    'quarta-feira': 3,
+    'quinta-feira': 4,
+    'sexta-feira': 5,
+    'sábado': 6
+  };
+  const currentDay = dayNameToNumber[currentDayInBrasilia.toLowerCase()] || now.getDay();
+  const currentTime = currentTimeInBrasilia;
+  
   const todayHours = hours.filter(h => h.day_of_week === currentDay && h.is_open);
   if (todayHours.length === 0) return false;
   return todayHours.some(period => currentTime >= period.opening_time && currentTime < period.closing_time);
@@ -510,6 +574,7 @@ function isWithinBusinessHours(hours: BusinessHour[]): boolean {
 
 function AdminLayoutInner() {
   const { user, restaurants, selectedRestaurant, selectedRestaurantIds, selectedRestaurantId, refreshRestaurants } = useRestaurantContext();
+  const { isKioskMode } = usePDVKiosk();
   const [pendingOrdersCount, setPendingOrdersCount] = useState(0);
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
   const [showCashRegister, setShowCashRegister] = useState(false);
@@ -719,21 +784,9 @@ function AdminLayoutInner() {
   }, [canAccessWhatsAppBot, location.pathname, user, navigate, toast]);
 
   // Prevent tab/window close when restaurant or cash register is open
-  useEffect(() => {
-    const isRestaurantOpen = selectedRestaurant?.is_open ?? false;
-    const shouldGuard = isRestaurantOpen || cashRegisterOpen;
-
-    if (!shouldGuard) return;
-
-    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      e.preventDefault();
-      e.returnValue = 'Você ainda tem operações ativas (restaurante/caixa aberto). Tem certeza que deseja sair?';
-      return e.returnValue;
-    };
-
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [selectedRestaurant?.is_open, cashRegisterOpen]);
+  // REMOVED: This was causing unwanted popups on navigation
+  // The beforeunload event is too aggressive and blocks legitimate navigation
+  // If this protection is needed in the future, it should be more targeted
 
   const handleToggleOpen = async (newIsOpen: boolean) => {
     if (!selectedRestaurant) return;
@@ -962,7 +1015,7 @@ function AdminLayoutInner() {
           />
           {/* Semi-transparent overlay for readability */}
           <div className="fixed inset-0 z-0 bg-background/60 dark:bg-background/50" />
-          <AdminSidebar pendingOrdersCount={pendingOrdersCount} isCollaborator={isCollaborator} canAccessWhatsAppBot={canAccessWhatsAppBot} isMaster={userRole === "master"} onLogout={handleLogoutAttempt} />
+          {!isKioskMode && <AdminSidebar pendingOrdersCount={pendingOrdersCount} isCollaborator={isCollaborator} canAccessWhatsAppBot={canAccessWhatsAppBot} isMaster={userRole === "master"} onLogout={handleLogoutAttempt} />}
           <main className="flex-1 overflow-auto relative z-10">
             {showSubAlert && daysRemaining !== null && (
               <SubscriptionExpiryBanner
@@ -972,32 +1025,66 @@ function AdminLayoutInner() {
                 trialExpired={trialExpired}
               />
             )}
-            <header className="h-14 md:h-16 border-b border-border/30 dark:border-white/5 flex items-center px-3 md:px-6 gap-2 md:gap-4 bg-background/70 dark:bg-background/60 backdrop-blur-2xl sticky top-0 z-10">
-              <SidebarTrigger>
-                <Menu className="w-5 h-5" />
-              </SidebarTrigger>
-              <div className="flex-1" />
-              
-              {/* Toggle Delivery Status - only when single restaurant selected */}
-              {selectedRestaurant && (
+            
+            {/* Setup banner for incomplete restaurant configuration */}
+            {selectedRestaurant && selectedRestaurant.name === "Meu Restaurante" && (
+              <div className="mx-4 mt-4 p-4 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800">
+                <div className="flex items-start gap-3">
+                  <div className="w-10 h-10 bg-amber-100 dark:bg-amber-900/50 rounded-full flex items-center justify-center flex-shrink-0">
+                    <Store className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="font-semibold text-amber-900 dark:text-amber-100 mb-1">Configure seu restaurante</h3>
+                    <p className="text-sm text-amber-700 dark:text-amber-300 mb-3">
+                      Complete o cadastro do seu restaurante para começar a receber pedidos. Adicione nome, logo, horários de funcionamento e mais.
+                    </p>
+                    <Button 
+                      size="sm" 
+                      className="bg-amber-600 hover:bg-amber-700 text-white"
+                      onClick={() => window.location.href = "/admin/negocio"}
+                    >
+                      Configurar meu restaurante agora
+                    </Button>
+                  </div>
+                  <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    className="h-8 w-8 text-amber-600 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-900/50"
+                    onClick={() => {
+                      // Dismiss banner by storing in localStorage
+                      localStorage.setItem('setupBannerDismissed', 'true');
+                      window.location.reload();
+                    }}
+                  >
+                    <X className="w-4 h-4" />
+                  </Button>
+                </div>
+              </div>
+            )}
+            {!isKioskMode && (
+              <header className="h-14 md:h-16 border-b border-border/30 dark:border-white/5 flex items-center px-3 md:px-6 gap-2 md:gap-4 bg-background/70 dark:bg-background/60 backdrop-blur-2xl sticky top-0 z-10">
+                <SidebarTrigger>
+                  <Menu className="w-5 h-5" />
+                </SidebarTrigger>
+                <div className="flex-1" />
+                
+                {/* Toggle Delivery Status */}
                 <Button
-                  variant={selectedRestaurant.is_open ? "default" : "outline"}
+                  variant={selectedRestaurant?.is_open ? "default" : "outline"}
                   size="sm"
                   onClick={handleToggleClick}
                   className={`gap-1.5 md:gap-2 rounded-full text-xs md:text-sm px-2.5 md:px-3 ${
-                    selectedRestaurant.is_open 
+                    selectedRestaurant?.is_open 
                       ? "bg-accent hover:bg-accent/90 text-accent-foreground" 
                       : "border-destructive text-destructive hover:bg-destructive/10"
                   }`}
                 >
                   <Store className="w-4 h-4" />
-                  <span className="hidden sm:inline">{selectedRestaurant.is_open ? "Restaurante Aberto" : "Restaurante Fechado"}</span>
-                  <span className="sm:hidden">{selectedRestaurant.is_open ? "Aberto" : "Fechado"}</span>
+                  <span className="hidden sm:inline">{selectedRestaurant?.is_open ? "Restaurante Aberto" : "Restaurante Fechado"}</span>
+                  <span className="sm:hidden">{selectedRestaurant?.is_open ? "Aberto" : "Fechado"}</span>
                 </Button>
-              )}
 
-              {/* Cash Register Button */}
-              {selectedRestaurant && (
+                {/* Cash Register Button */}
                 <Button
                   variant={cashRegisterOpen ? "default" : "outline"}
                   size="sm"
@@ -1012,11 +1099,26 @@ function AdminLayoutInner() {
                   <span className="hidden sm:inline">{cashRegisterOpen ? "Caixa Aberto" : "Caixa Fechado"}</span>
                   <span className="sm:hidden">{cashRegisterOpen ? "Caixa" : "Caixa"}</span>
                 </Button>
-              )}
-              
-              <ThemeToggle />
-              <span className="text-sm text-muted-foreground font-medium hidden md:inline">{user?.email}</span>
-            </header>
+
+                {location.pathname !== "/admin/salao" && (
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      navigate("/admin/pedidos?pedido_manual=true");
+                    }}
+                    disabled={!selectedRestaurant}
+                    className="gap-1.5 bg-orange-500 hover:bg-orange-600 text-white"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span className="hidden sm:inline">Pedido Manual</span>
+                    <span className="sm:hidden">Manual</span>
+                  </Button>
+                )}
+
+                <ThemeToggle />
+                <span className="text-sm text-muted-foreground font-medium hidden md:inline">{user?.email}</span>
+              </header>
+            )}
             <div className="p-2 md:p-6 relative z-10">
               <Outlet context={{ cashRegisterOpen }} />
             </div>
@@ -1062,47 +1164,47 @@ function AdminLayoutInner() {
       />
 
       {/* Exit Guard Dialog */}
-      <AlertDialog open={showExitGuard} onOpenChange={setShowExitGuard}>
-        <AlertDialogContent className="max-w-sm sm:max-w-md">
-          <AlertDialogHeader>
-            <AlertDialogTitle className="flex items-center gap-2">
+      <Dialog open={showExitGuard} onOpenChange={setShowExitGuard}>
+        <DialogContent className="max-w-md w-full mx-4">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
               ⚠️ Atenção antes de sair
-            </AlertDialogTitle>
-            <AlertDialogDescription asChild>
+            </DialogTitle>
+            <DialogDescription asChild>
               <div className="space-y-3">
                 <span className="block">
                   Você ainda tem operações ativas. Se fechar esta janela sem encerrar, o sistema continuará funcionando:
                 </span>
-                <div className="space-y-2">
+                <div className="space-y-2 w-full">
                   {selectedRestaurant?.is_open && (
-                    <div className="flex items-center gap-2 p-2.5 rounded-xl bg-accent/10 border border-accent/20">
+                    <div className="flex items-center gap-2 p-2.5 rounded-xl bg-accent/10 border border-accent/20 w-full">
                       <Store className="w-4 h-4 text-accent flex-shrink-0" />
                       <span className="text-sm font-medium text-foreground">Restaurante aberto — continuará recebendo pedidos</span>
                     </div>
                   )}
                   {cashRegisterOpen && (
-                    <div className="flex items-center gap-2 p-2.5 rounded-xl bg-primary/10 border border-primary/20">
+                    <div className="flex items-center gap-2 p-2.5 rounded-xl bg-primary/10 border border-primary/20 w-full">
                       <DollarSign className="w-4 h-4 text-primary flex-shrink-0" />
                       <span className="text-sm font-medium text-foreground">Caixa aberto — permanecerá aberto sem registro de fechamento</span>
                     </div>
                   )}
                 </div>
               </div>
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <div className="flex flex-col gap-2 sm:flex-row sm:justify-end mt-4">
-            <AlertDialogCancel className="w-full sm:w-auto">Voltar ao painel</AlertDialogCancel>
-            <AlertDialogAction
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="flex flex-wrap gap-2 justify-end mt-4">
+            <Button variant="outline" onClick={() => setShowExitGuard(false)} className="flex-1 sm:flex-none">Voltar ao painel</Button>
+            <Button
               onClick={(e) => {
                 e.preventDefault();
                 handleSafeExit();
               }}
               disabled={exitGuardClosing}
-              className="bg-primary hover:bg-primary/90 gap-2 w-full sm:w-auto"
+              className="bg-primary hover:bg-primary/90 gap-2 flex-1 sm:flex-none"
             >
               {exitGuardClosing ? "Encerrando..." : "Fechar tudo com segurança"}
-            </AlertDialogAction>
-            <AlertDialogAction
+            </Button>
+            <Button
               onClick={async (e) => {
                 e.preventDefault();
                 setShowExitGuard(false);
@@ -1110,13 +1212,14 @@ function AdminLayoutInner() {
                 clearLocalAuthState();
                 navigate("/admin/auth");
               }}
-              className="bg-destructive hover:bg-destructive/90 w-full sm:w-auto"
+              variant="destructive"
+              className="flex-1 sm:flex-none"
             >
               Sair mesmo assim
-            </AlertDialogAction>
-          </div>
-        </AlertDialogContent>
-      </AlertDialog>
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
@@ -1127,6 +1230,7 @@ export default function AdminLayout() {
   const navigate = useNavigate();
   const [tempUserId, setTempUserId] = useState<string | undefined>(undefined);
   const { role: userRole, isCollaborator, restaurantId: collabRestaurantId, loading: roleLoading } = useUserRole(tempUserId);
+  const { isKioskMode } = usePDVKiosk();
 
   // Unlock audio on mount
   useEffect(() => {

@@ -83,6 +83,9 @@ export default function AdminAgendamento() {
     },
   });
 
+  const [applyToAllStart, setApplyToAllStart] = useState('10:00');
+  const [applyToAllEnd, setApplyToAllEnd] = useState('22:00');
+
   // Load existing configuration
   useEffect(() => {
     async function loadConfig() {
@@ -133,14 +136,22 @@ export default function AdminAgendamento() {
           max_orders_per_slot: config.max_orders_per_slot,
           schedule: config.schedule,
           updated_at: new Date().toISOString(),
+        }, {
+          onConflict: "restaurant_id"
         });
 
       if (error) throw error;
 
       toast({ title: "Configurações salvas com sucesso!" });
-    } catch (error) {
+      setInitialConfig({ ...config });
+    } catch (error: any) {
       console.error("Error saving scheduling config:", error);
-      toast({ title: "Erro ao salvar", description: "Não foi possível salvar as configurações.", variant: "destructive" });
+      const errorMessage = error?.message || error?.details || "Não foi possível salvar as configurações.";
+      toast({ 
+        title: "Erro ao salvar", 
+        description: errorMessage,
+        variant: "destructive" 
+      });
     } finally {
       setSaving(false);
     }
@@ -157,6 +168,23 @@ export default function AdminAgendamento() {
         },
       },
     }));
+  }
+
+  function applyToAllActiveDays() {
+    setConfig(prev => {
+      const newSchedule = { ...prev.schedule };
+      daysOfWeek.forEach(day => {
+        if (newSchedule[day.key as keyof typeof newSchedule].enabled) {
+          newSchedule[day.key as keyof typeof newSchedule] = {
+            ...newSchedule[day.key as keyof typeof newSchedule],
+            start: applyToAllStart,
+            end: applyToAllEnd,
+          };
+        }
+      });
+      return { ...prev, schedule: newSchedule };
+    });
+    toast({ title: "Horário aplicado para todos os dias ativos" });
   }
 
   if (loading) {
@@ -183,10 +211,12 @@ export default function AdminAgendamento() {
           <h1 className="text-2xl font-bold">Agendamento de Pedidos</h1>
           <p className="text-muted-foreground text-sm">Configure o agendamento de delivery e retirada</p>
         </div>
-        <Button onClick={saveConfig} disabled={saving} className="gap-2">
-          <Save className="w-4 h-4" />
-          {saving ? "Salvando..." : "Salvar Configurações"}
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button onClick={saveConfig} disabled={saving} className="gap-2">
+            <Save className="w-4 h-4" />
+            {saving ? "Salvando..." : "Salvar Configurações"}
+          </Button>
+        </div>
       </div>
 
       {/* Enable Toggles */}
@@ -290,6 +320,38 @@ export default function AdminAgendamento() {
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
+            {/* Apply to all */}
+            <div className="flex items-center gap-4 p-4 bg-muted/50 rounded-lg border">
+              <div className="flex items-center gap-2 text-sm font-medium">
+                <Clock className="w-4 h-4 text-muted-foreground" />
+                Aplicar horário para todos os dias
+              </div>
+              <div className="flex items-center gap-2">
+                <Input
+                  type="time"
+                  value={applyToAllStart}
+                  onChange={(e) => setApplyToAllStart(e.target.value)}
+                  className="w-[120px]"
+                />
+                <span className="text-muted-foreground">às</span>
+                <Input
+                  type="time"
+                  value={applyToAllEnd}
+                  onChange={(e) => setApplyToAllEnd(e.target.value)}
+                  className="w-[120px]"
+                />
+              </div>
+              <Button
+                onClick={applyToAllActiveDays}
+                className="bg-orange-500 hover:bg-orange-600 text-white"
+              >
+                Aplicar para todos
+              </Button>
+            </div>
+
+            <div className="border-t" />
+
+            {/* Days */}
             {daysOfWeek.map((day) => (
               <div key={day.key} className="flex items-center gap-4 p-4 border rounded-lg">
                 <Switch

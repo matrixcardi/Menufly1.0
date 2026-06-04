@@ -8,6 +8,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { CurrencyInput } from "@/components/ui/currency-input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -274,15 +275,10 @@ export function CashRegisterDialog({
               <DollarSign className="w-3.5 h-3.5 text-muted-foreground" />
               Valor em caixa (R$)
             </Label>
-            <Input
+            <CurrencyInput
               id="amount"
-              type="text"
-              inputMode="decimal"
-              value={amount}
-              onChange={(e) => {
-                const val = e.target.value.replace(/[^0-9.,]/g, "");
-                setAmount(val);
-              }}
+              value={parseFloat(amount) || 0}
+              onChange={(value) => setAmount(value.toString())}
               placeholder="0,00"
               className="text-lg font-semibold"
             />

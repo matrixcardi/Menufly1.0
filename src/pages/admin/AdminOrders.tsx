@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useOutletContext } from "react-router-dom";
+import { useOutletContext, useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -46,6 +46,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { Tables } from "@/integrations/supabase/types";
 import { ManualOrderDrawer } from "@/components/admin/ManualOrderDrawer";
+import { KanbanBoard } from "@/components/admin/KanbanBoard";
 import { printOrder } from "@/components/orders/OrderReceipt";
 import { playNewOrderSound, NotificationSoundType, setKeepAliveCallback } from "@/lib/notification-sound";
 import { useRestaurantContext } from "@/contexts/RestaurantContext";
@@ -90,6 +91,8 @@ const paymentMethodLabels: Record<string, string> = { pix: "PIX", cash: "Dinheir
 export default function AdminOrders() {
   const { cashRegisterOpen } = useOutletContext<{ cashRegisterOpen: boolean }>();
   const { selectedRestaurantIds, selectedRestaurant, restaurants } = useRestaurantContext();
+  const location = useLocation();
+  const navigate = useNavigate();
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [notificationSound, setNotificationSound] = useState<NotificationSoundType>("medium");
@@ -105,6 +108,16 @@ export default function AdminOrders() {
   const restaurantId = selectedRestaurant?.id || (selectedRestaurantIds.length === 1 ? selectedRestaurantIds[0] : null);
   const manualOrderRestaurantId = restaurantId || restaurants[0]?.id || null;
   const restaurantName = selectedRestaurant?.name || restaurants[0]?.name || "";
+
+  // Check for pedido_manual query param to open modal automatically
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (params.get("pedido_manual") === "true") {
+      setShowManualOrder(true);
+      // Clean up the query param
+      navigate("/admin/pedidos", { replace: true });
+    }
+  }, [location.search, setShowManualOrder, navigate]);
 
   // Resolve addon names and prices from DB
   const resolveAddonNames = async (order: Order) => {
@@ -188,41 +201,57 @@ export default function AdminOrders() {
     fetchOrders();
 
     const handleRealtimePayload = (payload: any) => {
+      console.log('🟢 REALTIME EVENT RECEIVED:', payload);
       if (payload.eventType === "INSERT") {
         const newOrder = payload.new as Order;
         if (newOrder.payment_status === "awaiting_payment") return;
-        setOrders((prev) => { if (prev.some((o) => o.id === newOrder.id)) return prev; return [newOrder, ...prev]; });
-        if (newOrder.status === "pending" && newOrder.payment_status !== "awaiting_payment") {
-          const restName = restaurants.find(r => r.id === newOrder.restaurant_id)?.name || "";
-          toast({ title: "🔔 Novo pedido!", description: `${restName ? restName + " - " : ""}Pedido #${newOrder.daily_number ?? newOrder.order_number}`, duration: 10000 });
-          playNewOrderSound(notificationSound, `Pedido #${newOrder.daily_number ?? newOrder.order_number} - ${newOrder.customer_name}`);
-          if (localStorage.getItem("autoPrintOrders") === "true") setTimeout(() => printOrder(newOrder, restName), 500);
-        }
+        
+        // Use functional update to ensure we have the latest state
+        setOrders((prev) => { 
+          if (prev.some((o) => o.id === newOrder.id)) return prev; 
+          
+          // Logic for notification
+          if (newOrder.status === "pending" && newOrder.payment_status !== "awaiting_payment") {
+            const restName = restaurants.find(r => r.id === newOrder.restaurant_id)?.name || "";
+            toast({ title: "🔔 Novo pedido!", description: `${restName ? restName + " - " : ""}Pedido #${newOrder.daily_number ?? newOrder.order_number}`, duration: 10000 });
+            playNewOrderSound(notificationSound, `Pedido #${newOrder.daily_number ?? newOrder.order_number} - ${newOrder.customer_name}`);
+            if (localStorage.getItem("autoPrintOrders") === "true") setTimeout(() => printOrder(newOrder, restName), 500);
+          }
+          
+          return [newOrder, ...prev]; 
+        });
       } else if (payload.eventType === "UPDATE") {
         const updated = payload.new as Order;
-        const oldOrder = payload.old as Partial<Order>;
-        if (updated.is_archived) {
-          setOrders((prev) => prev.filter((o) => o.id !== updated.id));
-        } else {
-          if (oldOrder.payment_status === "awaiting_payment" && updated.payment_status === "paid") {
+        
+        setOrders((prev) => {
+          const oldOrder = prev.find((o) => o.id === updated.id);
+          
+          if (updated.is_archived) {
+            return prev.filter((o) => o.id !== updated.id);
+          }
+          
+          if (oldOrder?.payment_status === "awaiting_payment" && updated.payment_status === "paid") {
             const restName = restaurants.find(r => r.id === updated.restaurant_id)?.name || "";
             toast({ title: "🔔 Novo pedido pago!", description: `${restName ? restName + " - " : ""}Pedido #${updated.daily_number ?? updated.order_number}`, duration: 10000 });
             playNewOrderSound(notificationSound, `Pedido #${updated.daily_number ?? updated.order_number} - ${updated.customer_name}`);
             if (localStorage.getItem("autoPrintOrders") === "true") setTimeout(() => printOrder(updated, restName), 500);
           }
-          setOrders((prev) => prev.map((o) => o.id === updated.id ? updated : o));
-        }
+          
+          return prev.map((o) => o.id === updated.id ? updated : o);
+        });
       } else if (payload.eventType === "DELETE") {
         setOrders((prev) => prev.filter((o) => o.id !== payload.old.id));
       }
     };
 
     // Subscribe to each restaurant
+    const idsString = selectedRestaurantIds.join(",");
     const channels = selectedRestaurantIds.map((rid, idx) =>
       supabase.channel(`orders-realtime-${rid}-${idx}`)
         .on("postgres_changes", { event: "*", schema: "public", table: "orders", filter: `restaurant_id=eq.${rid}` }, handleRealtimePayload)
-        .subscribe((status) => {
-          if (status === "CHANNEL_ERROR") setTimeout(() => { supabase.removeChannel(channels[idx]); }, 3000);
+        .subscribe((status, err) => {
+          console.log(`📡 REALTIME STATUS [${rid}]:`, status);
+          if (err) console.error(`❌ REALTIME ERROR [${rid}]:`, err);
         })
     );
 
@@ -251,8 +280,12 @@ export default function AdminOrders() {
       }
     }, 15000);
 
-    return () => { channels.forEach(ch => supabase.removeChannel(ch)); clearInterval(pollInterval); setKeepAliveCallback(null); };
-  }, [selectedRestaurantIds.join(","), notificationSound, toast]);
+    return () => { 
+      channels.forEach(ch => supabase.removeChannel(ch)); 
+      clearInterval(pollInterval); 
+      setKeepAliveCallback(null); 
+    };
+  }, [selectedRestaurantIds.join(","), notificationSound, toast, restaurants]);
 
   const changeStatus = async (orderId: string, newStatus: string, driverId?: string, driverName?: string) => {
     // Block accepting orders if cash register is not open
@@ -411,9 +444,6 @@ export default function AdminOrders() {
             <span className="text-muted-foreground hidden sm:inline">Auto-imprimir</span>
             <Switch checked={autoPrint} onCheckedChange={(checked) => { setAutoPrint(checked); localStorage.setItem("autoPrintOrders", String(checked)); toast({ title: checked ? "🖨️ Impressão automática ativada" : "Impressão automática desativada" }); }} />
           </div>
-          <Button size="sm" onClick={() => setShowManualOrder(true)} disabled={!manualOrderRestaurantId} className="gap-1.5">
-            <Plus className="w-4 h-4" /> <span className="hidden sm:inline">Pedido Manual</span><span className="sm:hidden">Manual</span>
-          </Button>
           <Button variant="outline" size="icon" className="h-8 w-8 sm:h-9 sm:w-9" onClick={() => window.location.reload()}>
             <RefreshCw className="w-4 h-4" />
           </Button>
@@ -433,7 +463,7 @@ export default function AdminOrders() {
         </div>
       )}
 
-      {/* Grid of orders */}
+      {/* Kanban Board */}
       {sortedOrders.length === 0 ? (
         <div className="flex-1 flex items-center justify-center text-muted-foreground">
           <div className="text-center">
@@ -443,19 +473,17 @@ export default function AdminOrders() {
           </div>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 pb-4 overflow-y-auto">
-          {sortedOrders.map((order) => (
-            <CompactOrderCard
-              key={order.id}
-              order={order}
-              onClick={() => { setSelectedOrder(order); resolveAddonNames(order); }}
-              formatCurrency={formatCurrency}
-              restaurantName={restaurants.find(r => r.id === order.restaurant_id)?.name}
-              showRestaurantTag={selectedRestaurantIds.length > 1}
-              deliveryTimeMin={restaurants.find(r => r.id === order.restaurant_id)?.default_delivery_time_min}
-            />
-          ))}
-        </div>
+        <KanbanBoard
+          orders={sortedOrders}
+          onOrderClick={(order) => { setSelectedOrder(order); resolveAddonNames(order); }}
+          onChangeStatus={changeStatus}
+          formatCurrency={formatCurrency}
+          addonNamesCache={addonNamesCache}
+          addonPricesCache={addonPricesCache}
+          drivers={driversByRestaurant[selectedRestaurant?.id || ""] || []}
+          restaurantName={restaurantName}
+          deliveryTimeMin={selectedRestaurant?.default_delivery_time_min}
+        />
       )}
 
       {/* Order Detail Dialog */}
@@ -479,114 +507,6 @@ export default function AdminOrders() {
         </DialogContent>
       </Dialog>
     </div>
-  );
-}
-
-/* ─── Order Card ─── */
-
-interface CompactOrderCardProps {
-  order: Order;
-  onClick: () => void;
-  formatCurrency: (v: number) => string;
-  restaurantName?: string;
-  showRestaurantTag?: boolean;
-  deliveryTimeMin?: number | null;
-}
-
-function CompactOrderCard({ order, onClick, formatCurrency, restaurantName, showRestaurantTag, deliveryTimeMin }: CompactOrderCardProps) {
-  const cfg = stageConfig[order.status] || stageConfig.pending;
-  const StageIcon = cfg.icon;
-  const items = order.items as Array<{ quantity: number }>;
-  const totalItems = items.reduce((s, i) => s + i.quantity, 0);
-  const createdAt = new Date(order.created_at || "");
-
-  const isNew = order.status === "pending";
-  const isRejected = order.status === "rejected" || (order as any).status === "cancelled";
-  const isScheduled = order.scheduled_at != null;
-  const scheduledDate = isScheduled ? new Date(order.scheduled_at) : null;
-
-  const formatScheduledDate = (date: Date) => {
-    const today = new Date();
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    
-    const isToday = date.toDateString() === today.toDateString();
-    const isTomorrow = date.toDateString() === tomorrow.toDateString();
-    
-    const dateStr = isToday ? "hoje" : isTomorrow ? "amanhã" : date.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
-    const timeStr = date.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
-    
-    return `Agendado para ${dateStr} ${timeStr}`;
-  };
-
-  return (
-    <button
-      onClick={onClick}
-      className={`rounded-xl border bg-card shadow-sm overflow-hidden transition-all duration-200 hover:shadow-md text-left w-full relative ${
-        isRejected
-          ? "border-red-400 dark:border-red-600 opacity-60"
-          : isNew
-          ? "border-amber-400 dark:border-amber-600 ring-1 ring-amber-300/50 dark:ring-amber-600/30"
-          : "border-border"
-      }`}
-    >
-      <div className={`h-1.5 ${cfg.border.replace("border-", "bg-")} ${isNew ? "animate-pulse" : ""}`} />
-      {isNew && (
-        <span className="absolute top-3 right-3 flex items-center gap-1">
-          <span className="relative flex h-2.5 w-2.5">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-500 opacity-75" />
-            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500" />
-          </span>
-        </span>
-      )}
-      <div className="p-4">
-        <div className="flex items-center justify-between mb-2">
-          <div className="flex items-center gap-2">
-            <span className="text-base font-bold">#{order.daily_number ?? order.order_number}</span>
-            <div className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold ${cfg.bg} ${cfg.text}`}>
-              <StageIcon className="w-3 h-3" />
-              {cfg.label}
-            </div>
-            {(order as any).source === "ifood" && (
-              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-red-500/15 text-red-600 dark:text-red-400">
-                iFood
-              </span>
-            )}
-            {isScheduled && scheduledDate && (
-              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-orange-500/15 text-orange-600 dark:text-orange-400">
-                <Calendar className="w-3 h-3" />
-                {formatScheduledDate(scheduledDate)}
-              </span>
-            )}
-          </div>
-          <span className={`text-[11px] ${isNew ? "mr-5" : ""} text-muted-foreground`}>
-            {createdAt.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
-          </span>
-        </div>
-        <div className="flex items-center justify-between mb-1">
-          <p className="font-semibold text-sm truncate">{order.customer_name}</p>
-          {order.delivery_type === "delivery" && (
-            <OrderCountdown createdAt={order.created_at} acceptedAt={order.accepted_at} deliveryTimeMin={deliveryTimeMin} status={order.status} compact />
-          )}
-        </div>
-        {showRestaurantTag && restaurantName && (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-muted text-muted-foreground mb-1.5 max-w-full truncate">
-            🏪 {restaurantName}
-          </span>
-        )}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3 text-xs text-muted-foreground">
-            <span>{order.delivery_type === "delivery" ? "🛵 Entrega" : "🏪 Retirada"}</span>
-            <span className="inline-flex items-center gap-1">
-              <CreditCard className="w-3 h-3" />
-              {paymentMethodLabels[order.payment_method] || order.payment_method}
-            </span>
-            <span>{totalItems} {totalItems === 1 ? "item" : "itens"}</span>
-          </div>
-          <span className="font-bold text-base">{formatCurrency(Number(order.total))}</span>
-        </div>
-      </div>
-    </button>
   );
 }
 

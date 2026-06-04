@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Mail, Lock, Loader2, User } from "lucide-react";
 import { toast } from "sonner";
 import { validateEmail, validateName } from "@/lib/validations";
+import { translateError } from "@/lib/error-messages";
 
 interface CheckoutAuthFormProps {
   onAuthenticated: () => void;
@@ -66,10 +67,8 @@ export default function CheckoutAuthForm({ onAuthenticated }: CheckoutAuthFormPr
         onAuthenticated();
       }
     } catch (error: any) {
-      const msg = error.message?.includes("already registered")
-        ? "Este email já está cadastrado. Faça login."
-        : error.message || "Erro ao processar. Tente novamente.";
-      toast.error(msg);
+      const translatedError = translateError(error);
+      toast.error(translatedError);
       if (error.message?.includes("already registered")) {
         setMode("login");
       }

@@ -107,12 +107,27 @@ export default function AdminEstoque() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<FilterStatus>("todos");
 
+  // Movimentações filters
+  const [movementsSearch, setMovementsSearch] = useState("");
+  const [movementsSupplierFilter, setMovementsSupplierFilter] = useState<string>("todos");
+  const [movementsPeriodFilter, setMovementsPeriodFilter] = useState<string>("todos");
+  const [movementsSortOrder, setMovementsSortOrder] = useState<"asc" | "desc">("desc");
+
+  // Estoque Atual filters
+  const [stockSearch, setStockSearch] = useState("");
+  const [stockTypeFilter, setStockTypeFilter] = useState<string>("todos");
+  const [stockAvailabilityFilter, setStockAvailabilityFilter] = useState<string>("todos");
+  const [stockUnitFilter, setStockUnitFilter] = useState<string>("todos");
+  const [stockControlledFilter, setStockControlledFilter] = useState<string>("todos");
+  const [stockSortOrder, setStockSortOrder] = useState<"asc" | "desc">("asc");
+
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [selectedIngredientId, setSelectedIngredientId] = useState<string | null>(null);
   const selectedRow = useMemo(() => rows.find(r => r.ingredientId === selectedIngredientId) || null, [rows, selectedIngredientId]);
 
   const [historyLoading, setHistoryLoading] = useState(false);
   const [history, setHistory] = useState<StockMovement[]>([]);
+  const [movements, setMovements] = useState<StockMovement[]>([]);
 
   const [entradaOpen, setEntradaOpen] = useState(false);
   const [ajusteOpen, setAjusteOpen] = useState(false);
@@ -243,9 +258,31 @@ export default function AdminEstoque() {
     }
   }
 
+  async function fetchMovements() {
+    if (!restaurantId) {
+      setMovements([]);
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from("stock_movements")
+        .select("id, ingredient_id, type, quantity, reason, created_at, ingredients:ingredient_id (name, unit)")
+        .eq("restaurant_id", restaurantId)
+        .order("created_at", { ascending: false })
+        .limit(50);
+
+      if (error) throw error;
+      setMovements((data as StockMovement[]) || []);
+    } catch (err: any) {
+      toast({ title: "Erro ao carregar movimentações", description: err.message, variant: "destructive" });
+    }
+  }
+
   useEffect(() => {
     fetchStock();
     fetchIngredients();
+    fetchMovements();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [restaurantId]);
 
@@ -276,6 +313,87 @@ export default function AdminEstoque() {
     const critico = rows.filter(r => r.status === "critico").length;
     return { total, alerta, critico };
   }, [rows]);
+
+  // Filter movements
+  const filteredMovements = useMemo(() => {
+    let filtered = [...movements];
+
+    // Search by text (nota fiscal or fornecedor)
+    if (movementsSearch.trim()) {
+      const q = movementsSearch.trim().toLowerCase();
+      filtered = filtered.filter(m => {
+        const reason = (m.reason || "").toLowerCase();
+        return reason.includes(q);
+      });
+    }
+
+    // Filter by period
+    if (movementsPeriodFilter !== "todos") {
+      const now = new Date();
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      
+      filtered = filtered.filter(m => {
+        const date = new Date(m.created_at);
+        
+        if (movementsPeriodFilter === "hoje") {
+          return date >= today;
+        } else if (movementsPeriodFilter === "esta_semana") {
+          const weekAgo = new Date(today);
+          weekAgo.setDate(weekAgo.getDate() - 7);
+          return date >= weekAgo;
+        } else if (movementsPeriodFilter === "este_mes") {
+          const monthAgo = new Date(today);
+          monthAgo.setMonth(monthAgo.getMonth() - 1);
+          return date >= monthAgo;
+        }
+        return true;
+      });
+    }
+
+    // Sort by date
+    filtered.sort((a, b) => {
+      const dateA = new Date(a.created_at).getTime();
+      const dateB = new Date(b.created_at).getTime();
+      return movementsSortOrder === "asc" ? dateA - dateB : dateB - dateA;
+    });
+
+    return filtered;
+  }, [movements, movementsSearch, movementsPeriodFilter, movementsSortOrder]);
+
+  // Filter stock
+  const filteredStock = useMemo(() => {
+    let filtered = [...rows];
+
+    // Search by name
+    if (stockSearch.trim()) {
+      const q = stockSearch.trim().toLowerCase();
+      filtered = filtered.filter(r => r.ingredientName.toLowerCase().includes(q));
+    }
+
+    // Filter by availability
+    if (stockAvailabilityFilter !== "todos") {
+      filtered = filtered.filter(r => {
+        if (stockAvailabilityFilter === "disponivel") return r.status === "ok";
+        if (stockAvailabilityFilter === "alerta") return r.status === "alerta";
+        if (stockAvailabilityFilter === "zerado") return r.status === "critico";
+        return true;
+      });
+    }
+
+    // Filter by unit
+    if (stockUnitFilter !== "todos") {
+      filtered = filtered.filter(r => r.unit === stockUnitFilter);
+    }
+
+    // Sort by name
+    filtered.sort((a, b) => {
+      return stockSortOrder === "asc" 
+        ? a.ingredientName.localeCompare(b.ingredientName, "pt-BR")
+        : b.ingredientName.localeCompare(a.ingredientName, "pt-BR");
+    });
+
+    return filtered;
+  }, [rows, stockSearch, stockAvailabilityFilter, stockUnitFilter, stockSortOrder]);
 
   async function openHistory(ingredientId: string) {
     if (!restaurantId) return;
@@ -362,12 +480,9 @@ export default function AdminEstoque() {
       }
     }
 
-    toast({ title: "Entrada registrada" });
-    setEntradaOpen(false);
-    setEntradaIngredientId("");
-    setEntradaQty("");
-    setEntradaSupplierId("none");
     fetchStock();
+    fetchIngredients();
+    fetchMovements();
   }
 
   async function registerAjuste() {
@@ -432,6 +547,7 @@ export default function AdminEstoque() {
     setAjusteNewQty("");
     setAjusteReason("");
     fetchStock();
+    fetchMovements();
   }
 
   return (
@@ -441,7 +557,7 @@ export default function AdminEstoque() {
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2">
             <Box className="w-6 h-6" />
-            Estoque
+            Estoque & Movimentações
           </h1>
           <p className="text-sm text-muted-foreground">
             {selectedRestaurant ? `Restaurante: ${selectedRestaurant.name}` : "Gerencie o saldo dos ingredientes"}
@@ -450,33 +566,11 @@ export default function AdminEstoque() {
         <div className="flex gap-2">
           <Button
             variant="outline"
-            onClick={() => fetchStock()}
+            onClick={() => { fetchStock(); fetchMovements(); }}
             className="gap-2"
           >
             <RefreshCw className="w-4 h-4" />
             Atualizar
-          </Button>
-          <Button
-            onClick={async () => {
-              if (!(await ensureRestaurantSelected())) return;
-              await fetchSuppliersIfNeeded();
-              setEntradaOpen(true);
-            }}
-            className="gap-2"
-          >
-            <ArrowUpCircle className="w-4 h-4" />
-            Registrar Entrada
-          </Button>
-          <Button
-            variant="secondary"
-            onClick={async () => {
-              if (!(await ensureRestaurantSelected())) return;
-              setAjusteOpen(true);
-            }}
-            className="gap-2"
-          >
-            <SlidersHorizontal className="w-4 h-4" />
-            Ajuste de Inventário
           </Button>
         </div>
       </div>
@@ -509,79 +603,214 @@ export default function AdminEstoque() {
         </Card>
       </div>
 
-      {/* Filters */}
-      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <div className="flex flex-1 gap-2">
-          <Input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Buscar ingrediente..."
-            className="max-w-md"
-          />
-          <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as FilterStatus)}>
-            <SelectTrigger className="w-[180px]">
-              <SelectValue placeholder="Status" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="todos">Todos</SelectItem>
-              <SelectItem value="ok">OK</SelectItem>
-              <SelectItem value="alerta">Alerta</SelectItem>
-              <SelectItem value="critico">Crítico</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="text-sm text-muted-foreground">
-          {loading ? "Carregando..." : `${filteredRows.length} item(ns)`}
-        </div>
-      </div>
-
-      {/* Table */}
+      {/* Section 1 - Movimentações */}
       <Card>
-        <CardContent className="p-0">
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-lg">Movimentações</CardTitle>
+            <div className="flex gap-2">
+              <Button
+                onClick={async () => {
+                  if (!(await ensureRestaurantSelected())) return;
+                  await fetchSuppliersIfNeeded();
+                  setEntradaOpen(true);
+                }}
+                className="gap-2"
+              >
+                <ArrowUpCircle className="w-4 h-4" />
+                Registrar Entrada
+              </Button>
+              <Button
+                variant="secondary"
+                onClick={async () => {
+                  if (!(await ensureRestaurantSelected())) return;
+                  setAjusteOpen(true);
+                }}
+                className="gap-2"
+              >
+                <SlidersHorizontal className="w-4 h-4" />
+                Ajuste de Inventário
+              </Button>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {/* Filters */}
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div className="flex flex-1 flex-wrap gap-2">
+              <Input
+                value={movementsSearch}
+                onChange={(e) => setMovementsSearch(e.target.value)}
+                placeholder="Buscar por nota fiscal ou fornecedor..."
+                className="max-w-md"
+              />
+              <Select value={movementsPeriodFilter} onValueChange={setMovementsPeriodFilter}>
+                <SelectTrigger className="w-[160px]">
+                  <SelectValue placeholder="Período" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todos">Todos</SelectItem>
+                  <SelectItem value="hoje">Hoje</SelectItem>
+                  <SelectItem value="esta_semana">Esta semana</SelectItem>
+                  <SelectItem value="este_mes">Este mês</SelectItem>
+                </SelectContent>
+              </Select>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setMovementsSortOrder(movementsSortOrder === "asc" ? "desc" : "asc")}
+                className="gap-2"
+              >
+                Data entrada {movementsSortOrder === "asc" ? "↑" : "↓"}
+              </Button>
+            </div>
+            <div className="text-sm text-muted-foreground">
+              {filteredMovements.length} registro(s)
+            </div>
+          </div>
+
+          {/* Table */}
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Ingrediente</TableHead>
-                <TableHead>Unidade</TableHead>
-                <TableHead className="text-right">Qtd atual</TableHead>
-                <TableHead className="text-right">Mínimo</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Última movimentação</TableHead>
+                <TableHead>ID</TableHead>
+                <TableHead>Nota Fiscal</TableHead>
+                <TableHead>Fornecedor</TableHead>
+                <TableHead>Valor Total</TableHead>
+                <TableHead>Data Entrada</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {loading ? (
                 Array.from({ length: 6 }).map((_, i) => (
                   <TableRow key={i}>
-                    <TableCell colSpan={6}>
+                    <TableCell colSpan={5}>
                       <Skeleton className="h-8 w-full" />
                     </TableCell>
                   </TableRow>
                 ))
-              ) : filteredRows.length === 0 ? (
+              ) : filteredMovements.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="py-12 text-center text-muted-foreground">
+                  <TableCell colSpan={5} className="py-12 text-center text-muted-foreground">
+                    Nenhuma movimentação encontrada.
+                  </TableCell>
+                </TableRow>
+              ) : (
+                filteredMovements.map((m) => (
+                  <TableRow key={m.id}>
+                    <TableCell className="font-medium">{m.id.slice(0, 8)}</TableCell>
+                    <TableCell>—</TableCell>
+                    <TableCell>—</TableCell>
+                    <TableCell>—</TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {formatDateTime(m.created_at)}
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      {/* Section 2 - Estoque Atual */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg">Estoque Atual</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {/* Filters */}
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div className="flex flex-1 flex-wrap gap-2">
+              <Input
+                value={stockSearch}
+                onChange={(e) => setStockSearch(e.target.value)}
+                placeholder="Buscar por nome..."
+                className="max-w-md"
+              />
+              <Select value={stockAvailabilityFilter} onValueChange={setStockAvailabilityFilter}>
+                <SelectTrigger className="w-[160px]">
+                  <SelectValue placeholder="Disponibilidade" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todos">Todos</SelectItem>
+                  <SelectItem value="disponivel">Disponível</SelectItem>
+                  <SelectItem value="alerta">Em alerta</SelectItem>
+                  <SelectItem value="zerado">Zerado</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={stockUnitFilter} onValueChange={setStockUnitFilter}>
+                <SelectTrigger className="w-[120px]">
+                  <SelectValue placeholder="Unidade" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todos">Todas</SelectItem>
+                  <SelectItem value="kg">kg</SelectItem>
+                  <SelectItem value="g">g</SelectItem>
+                  <SelectItem value="L">L</SelectItem>
+                  <SelectItem value="ml">ml</SelectItem>
+                  <SelectItem value="un">un</SelectItem>
+                </SelectContent>
+              </Select>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setStockSortOrder(stockSortOrder === "asc" ? "desc" : "asc")}
+                className="gap-2"
+              >
+                Nome {stockSortOrder === "asc" ? "↑" : "↓"}
+              </Button>
+            </div>
+            <div className="text-sm text-muted-foreground">
+              {filteredStock.length} registro(s)
+            </div>
+          </div>
+
+          {/* Table */}
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Tipo</TableHead>
+                <TableHead>Nome</TableHead>
+                <TableHead className="text-right">Disponível</TableHead>
+                <TableHead className="text-right">Em Estoque</TableHead>
+                <TableHead className="text-right">Mínimo</TableHead>
+                <TableHead>Controlado por</TableHead>
+                <TableHead className="text-right">Valor Unitário</TableHead>
+                <TableHead className="text-right">Valor Total</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {loading ? (
+                Array.from({ length: 6 }).map((_, i) => (
+                  <TableRow key={i}>
+                    <TableCell colSpan={8}>
+                      <Skeleton className="h-8 w-full" />
+                    </TableCell>
+                  </TableRow>
+                ))
+              ) : filteredStock.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={8} className="py-12 text-center text-muted-foreground">
                     Nenhum ingrediente encontrado.
                   </TableCell>
                 </TableRow>
               ) : (
-                filteredRows.map((r) => (
+                filteredStock.map((r) => (
                   <TableRow
                     key={r.ingredientId}
                     role="button"
                     onClick={() => openHistory(r.ingredientId)}
                     className="cursor-pointer"
                   >
+                    <TableCell>Ingrediente</TableCell>
                     <TableCell className="font-medium">{r.ingredientName}</TableCell>
-                    <TableCell>{r.unit}</TableCell>
+                    <TableCell className="text-right">{formatQty(r.currentQty)}</TableCell>
                     <TableCell className="text-right">{formatQty(r.currentQty)}</TableCell>
                     <TableCell className="text-right">{formatQty(r.minQty)}</TableCell>
-                    <TableCell>
-                      <Badge variant={badgeVariant(r.status)}>{statusLabel(r.status)}</Badge>
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {r.lastMovementAt ? formatDateTime(r.lastMovementAt) : "—"}
-                    </TableCell>
+                    <TableCell>—</TableCell>
+                    <TableCell className="text-right">—</TableCell>
+                    <TableCell className="text-right">—</TableCell>
                   </TableRow>
                 ))
               )}

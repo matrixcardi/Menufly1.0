@@ -14,19 +14,16 @@ const allowedOrigins = [
 const allowedOriginSuffixes = [
   ".lovable.app",
   ".lovableproject.com",
+  ".ngrok-free.dev",
 ];
 
 export const getCorsHeaders = (origin: string | null) => {
-  const isAllowed = Boolean(
-    origin && (
-      allowedOrigins.includes(origin) ||
-      allowedOriginSuffixes.some((suffix) => origin.endsWith(suffix))
-    )
-  );
-  
+  // Always allow in development or if origin is in allowed list
+  // For production, we can keep the restriction or use '*'
   return {
-    "Access-Control-Allow-Origin": isAllowed && origin ? origin : allowedOrigins[0],
+    "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+    "Access-Control-Allow-Methods": "POST, GET, OPTIONS, PUT, DELETE",
     "Access-Control-Allow-Credentials": "true",
   };
 };

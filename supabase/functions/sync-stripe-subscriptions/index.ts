@@ -61,7 +61,10 @@ serve(async (req) => {
 
       await supabase
         .from("profiles")
-        .update({ subscription_status: "active", subscription_plan: plan })
+        .update({ 
+          subscription_status: "active", 
+          subscription_plan: plan
+        })
         .eq("id", profile.id);
       await supabase
         .from("restaurants")

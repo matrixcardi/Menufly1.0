@@ -14,6 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useCart } from "@/contexts/CartContext";
+import { translateError } from "@/lib/error-messages";
 
 interface CardPaymentDrawerProps {
   open: boolean;
@@ -117,13 +118,17 @@ export function CardPaymentDrawer({
 
   const handleSubmit = async () => {
     if (!mpInstance) {
-      toast.error("SDK do Mercado Pago não carregado");
+      toast.error("Erro ao processar pagamento", {
+        description: "SDK do Mercado Pago não carregado",
+      });
       return;
     }
 
     const cleanCardNumber = cardNumber.replace(/\s/g, "");
     if (cleanCardNumber.length < 13 || !cardholderName || !expirationMonth || !expirationYear || !securityCode || !docNumber || !email) {
-      toast.error("Preencha todos os campos");
+      toast.error("Erro ao processar pagamento", {
+        description: "Preencha todos os campos",
+      });
       return;
     }
 
@@ -216,7 +221,10 @@ export function CardPaymentDrawer({
     } catch (err: any) {
       console.error("Card payment error:", err);
       setStatus("rejected");
-      toast.error(err.message || "Erro ao processar pagamento");
+      const translatedError = translateError(err);
+      toast.error("Erro ao processar pagamento", {
+        description: translatedError,
+      });
     } finally {
       setLoading(false);
     }

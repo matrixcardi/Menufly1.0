@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useRestaurantContext } from "@/contexts/RestaurantContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PhoneInput } from "@/components/ui/phone-input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -40,6 +41,7 @@ interface Restaurant {
   address_city: string | null;
   address_state: string | null;
   instagram_url: string | null;
+  google_maps_url: string | null;
   whatsapp_phone: string | null;
   opening_time: string;
   closing_time: string;
@@ -353,6 +355,7 @@ export default function AdminBusiness() {
           address_city: restaurant.address_city,
           address_state: restaurant.address_state,
           instagram_url: restaurant.instagram_url,
+          google_maps_url: restaurant.google_maps_url,
           whatsapp_phone: restaurant.whatsapp_phone,
           opening_time: restaurant.opening_time,
           closing_time: restaurant.closing_time,
@@ -612,17 +615,32 @@ export default function AdminBusiness() {
             </div>
             <div className="space-y-2">
               <Label className="flex items-center gap-2">
-                📱 WhatsApp do Restaurante
+                � Link do Google Maps (opcional)
               </Label>
               <Input
-                value={restaurant.whatsapp_phone || ""}
+                value={restaurant.google_maps_url || ""}
                 onChange={(e) =>
-                  setRestaurant({ ...restaurant, whatsapp_phone: e.target.value })
+                  setRestaurant({ ...restaurant, google_maps_url: e.target.value })
                 }
-                placeholder="5511999999999"
+                placeholder="https://maps.app.goo.gl/..."
               />
               <p className="text-xs text-muted-foreground">
-                Número com DDD usado para o cliente entrar em contato (ex: 5511999999999)
+                Cole o link do seu Google Meu Negócio para garantir que clientes encontrem o local exato
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label className="flex items-center gap-2">
+                �📱 WhatsApp do Restaurante
+              </Label>
+              <PhoneInput
+                value={restaurant.whatsapp_phone || ""}
+                onChange={(value) =>
+                  setRestaurant({ ...restaurant, whatsapp_phone: value })
+                }
+                placeholder="(11) 9 9999-9999"
+              />
+              <p className="text-xs text-muted-foreground">
+                Número com DDD usado para o cliente entrar em contato
               </p>
             </div>
           </CardContent>
@@ -717,8 +735,30 @@ export default function AdminBusiness() {
                   if (restaurant.operation_mode === 'automatic' && checked) {
                     // Find next closing time from business hours
                     const now = new Date();
-                    const currentDay = now.getDay();
-                    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+                    const currentTimeInBrasilia = now.toLocaleTimeString('pt-BR', {
+                      timeZone: 'America/Sao_Paulo',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      hour12: false
+                    });
+                    const currentDayInBrasilia = now.toLocaleDateString('pt-BR', {
+                      timeZone: 'America/Sao_Paulo',
+                      weekday: 'long'
+                    });
+                    
+                    // Convert day name to number (0 = Sunday, 6 = Saturday)
+                    const dayNameToNumber: Record<string, number> = {
+                      'domingo': 0,
+                      'segunda-feira': 1,
+                      'terça-feira': 2,
+                      'quarta-feira': 3,
+                      'quinta-feira': 4,
+                      'sexta-feira': 5,
+                      'sábado': 6
+                    };
+                    const currentDay = dayNameToNumber[currentDayInBrasilia.toLowerCase()] || now.getDay();
+                    const [currentHour, currentMin] = currentTimeInBrasilia.split(':').map(Number);
+                    const currentMinutes = currentHour * 60 + currentMin;
                     
                     // Check today's remaining closing times
                     const todayHours = businessHours
@@ -735,8 +775,14 @@ export default function AdminBusiness() {
                       const closeMin = cH * 60 + cM;
                       if (closeMin > currentMinutes) {
                         // Set override until this closing time today
-                        const closeDate = new Date(now);
+                        // Create a date in America/Sao_Paulo timezone
+                        const closeDate = new Date();
+                        const brasiliaOffset = -3 * 60; // UTC-3 in minutes
+                        const localOffset = closeDate.getTimezoneOffset(); // Local offset in minutes
+                        const offsetDiff = brasiliaOffset - localOffset;
+                        
                         closeDate.setHours(cH, cM, 0, 0);
+                        closeDate.setTime(closeDate.getTime() + offsetDiff * 60 * 1000);
                         overrideUntil = closeDate.toISOString();
                         foundClose = true;
                         break;
@@ -757,9 +803,15 @@ export default function AdminBusiness() {
                         if (dayHrs.length > 0) {
                           const lastPeriod = dayHrs[0];
                           const [cH, cM] = lastPeriod.closing_time.split(':').map(Number);
-                          const closeDate = new Date(now);
+                          // Create a date in America/Sao_Paulo timezone
+                          const closeDate = new Date();
+                          const brasiliaOffset = -3 * 60; // UTC-3 in minutes
+                          const localOffset = closeDate.getTimezoneOffset(); // Local offset in minutes
+                          const offsetDiff = brasiliaOffset - localOffset;
+                          
                           closeDate.setDate(closeDate.getDate() + i);
                           closeDate.setHours(cH, cM, 0, 0);
+                          closeDate.setTime(closeDate.getTime() + offsetDiff * 60 * 1000);
                           overrideUntil = closeDate.toISOString();
                           break;
                         }

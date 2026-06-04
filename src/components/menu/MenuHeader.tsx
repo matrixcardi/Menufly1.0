@@ -26,7 +26,7 @@ export function MenuHeader() {
         </div>
 
         {!isOpen && (
-          <div className="mt-2 py-1.5 px-3 bg-warning/10 text-warning rounded-md text-sm text-center font-medium">
+          <div className="mt-2 mb-3 py-1.5 px-3 bg-warning/10 text-warning rounded-md text-sm text-center font-medium">
             Loja fechada, abre às {opensAt}
           </div>
         )}

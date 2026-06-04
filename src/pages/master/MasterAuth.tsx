@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Shield, Loader2 } from "lucide-react";
 import { performCleanSignOut, clearLocalAuthState } from "@/lib/auth-cleanup";
+import { translateError } from "@/lib/error-messages";
 
 export default function MasterAuth() {
   const navigate = useNavigate();
@@ -69,9 +70,10 @@ export default function MasterAuth() {
 
       navigate("/master");
     } catch (error: unknown) {
+      const translatedError = translateError(error);
       toast({
         title: "Erro no login",
-        description: error instanceof Error ? error.message : "Credenciais inválidas.",
+        description: translatedError,
         variant: "destructive"
       });
     } finally {

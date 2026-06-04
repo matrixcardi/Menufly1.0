@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, lazy, Suspense } from "react";
 import { useParams } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
 import { RestaurantHeader } from "@/components/menu/RestaurantHeader";
 import { ClosingSoonBanner } from "@/components/menu/ClosingSoonBanner";
 import { CategoryTabs } from "@/components/menu/CategoryTabs";
@@ -76,9 +77,41 @@ const MenuPage = () => {
   }, [drawerOpen]);
   
   const categoryTabsRef = useRef<HTMLDivElement>(null);
-  
-  const { addItem, setRestaurantId } = useCart();
+  const initialIsOpenRef = useRef<boolean>(false);
+
+  const { addItem, setRestaurantId, setRestaurantSlug } = useCart();
   const { restaurant, isClosingSoon, minutesUntilClose, menuTheme, categories, products, productCategoryLinks, loading, notFound } = useRestaurantBySlug(slug);
+
+  // Store initial restaurant status for polling comparison
+  useEffect(() => {
+    if (restaurant?.is_open !== undefined) {
+      initialIsOpenRef.current = restaurant.is_open;
+    }
+  }, [restaurant?.is_open]);
+
+  // Poll restaurant status every 30 seconds and reload if changed
+  useEffect(() => {
+    if (!slug || !restaurant?.id) return;
+
+    const pollInterval = setInterval(async () => {
+      try {
+        const { data: restaurantData } = await supabase
+          .from("restaurants")
+          .select("is_open")
+          .eq("slug", slug)
+          .maybeSingle();
+
+        if (restaurantData && restaurantData.is_open !== initialIsOpenRef.current) {
+          // Status changed, reload the page
+          window.location.reload();
+        }
+      } catch (error) {
+        console.error("Error polling restaurant status:", error);
+      }
+    }, 30000); // 30 seconds
+
+    return () => clearInterval(pollInterval);
+  }, [slug, restaurant?.id]);
 
   // Defer non-critical work (tracking + highlights banner + drawer prefetch) until idle
   useEffect(() => {
@@ -97,6 +130,13 @@ const MenuPage = () => {
       setRestaurantId(restaurant.id);
     }
   }, [restaurant?.id, setRestaurantId]);
+
+  // Set restaurant slug in cart context for localStorage persistence
+  useEffect(() => {
+    if (slug) {
+      setRestaurantSlug(slug);
+    }
+  }, [slug, setRestaurantSlug]);
 
   // Set first category as active when categories load
   useEffect(() => {

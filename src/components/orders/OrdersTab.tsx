@@ -7,6 +7,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
+import { useConfirm } from "@/hooks/use-confirm";
 
 const statusLabels: Record<string, string> = {
   pending: "Pedido Feito",
@@ -35,6 +36,7 @@ const statusColors: Record<string, string> = {
 export function OrdersTab() {
   const { orders, refreshOrders } = useOrderHistory();
   const navigate = useNavigate();
+  const { confirm, ConfirmDialogNode } = useConfirm();
   const [dbStatuses, setDbStatuses] = useState<Record<string, string>>({});
   const [pixOrder, setPixOrder] = useState<{
     dbOrderId: string;
@@ -144,6 +146,7 @@ export function OrdersTab() {
       nome: order.customerName,
       entrega: order.deliveryMethod,
       total: order.total.toString(),
+      loja: order.restaurantSlug || "", // Preserve restaurant slug for navigation
     });
     navigate(`/pedido?${params.toString()}`);
   };
@@ -161,8 +164,15 @@ export function OrdersTab() {
     e.stopPropagation();
     if (!order.dbOrderId) return;
 
-    const confirmed = window.confirm("Tem certeza que deseja cancelar este pedido?");
-    if (!confirmed) return;
+    const ok = await confirm({
+      type: "danger",
+      title: "Cancelar este pedido?",
+      description: `O pedido #${order.orderNumber} será cancelado.`,
+      impact: "Esta ação não pode ser desfeita.",
+      confirmText: "Sim, cancelar pedido",
+      cancelText: "Voltar",
+    });
+    if (!ok) return;
 
     const { data, error } = await supabase.rpc("cancel_order_by_customer", {
       p_order_id: order.dbOrderId,
@@ -295,6 +305,8 @@ export function OrdersTab() {
           deliveryMethod={pixOrder.deliveryMethod}
         />
       )}
+
+      {ConfirmDialogNode}
     </>
   );
 }

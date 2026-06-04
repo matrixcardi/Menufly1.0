@@ -11,6 +11,7 @@ import { motion } from "framer-motion";
 import { Logo } from "@/components/Logo";
 import { logger } from "@/lib/logger";
 import { validateEmail, validateName } from "@/lib/validations";
+import { translateError } from "@/lib/error-messages";
 
 export default function CreateAccount() {
   const navigate = useNavigate();
@@ -109,12 +110,13 @@ export default function CreateAccount() {
       });
 
       if (signUpError) {
+        const translatedError = translateError(signUpError);
         if (signUpError.message.includes("already registered")) {
           setErrors({ email: "Este email já está cadastrado" });
         } else {
           toast({
             title: "Erro ao criar conta",
-            description: signUpError.message,
+            description: translatedError,
             variant: "destructive",
           });
         }
@@ -189,9 +191,10 @@ export default function CreateAccount() {
 
     } catch (err) {
       logger.error("Create account error:", err);
+      const translatedError = translateError(err);
       toast({
         title: "Erro ao criar conta",
-        description: "Ocorreu um erro inesperado. Tente novamente.",
+        description: translatedError,
         variant: "destructive",
       });
     } finally {

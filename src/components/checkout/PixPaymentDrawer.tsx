@@ -10,6 +10,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { translateError } from "@/lib/error-messages";
 
 interface PixPaymentDrawerProps {
   open: boolean;
@@ -246,7 +247,10 @@ export function PixPaymentDrawer({
       });
 
       if (fnError || !data?.success) {
-        toast.error("Erro ao verificar pagamento");
+        const translatedError = translateError(fnError || data?.error);
+        toast.error("Erro ao verificar pagamento", {
+          description: translatedError,
+        });
         return;
       }
 

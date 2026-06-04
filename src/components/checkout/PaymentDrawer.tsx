@@ -17,6 +17,7 @@ import { logger } from "@/lib/logger";
 import { trackPurchase, trackAddPaymentInfo } from "@/lib/meta-pixel";
 import { PixPaymentDrawer } from "./PixPaymentDrawer";
 import { CardPaymentDrawer } from "./CardPaymentDrawer";
+import { translateError } from "@/lib/error-messages";
 
 interface PaymentDrawerProps {
   open: boolean;
@@ -30,6 +31,7 @@ interface PaymentDrawerProps {
     neighborhood: string;
     complement?: string;
     reference?: string;
+    cep?: string;
   };
   deliveryFee?: number;
   restaurantId?: string;
@@ -141,7 +143,7 @@ export function PaymentDrawer({
       }));
 
       const addressString = address
-        ? `${address.street}, ${address.number}${address.complement ? ` - ${address.complement}` : ''}, ${address.neighborhood}${address.reference ? ` (Ref: ${address.reference})` : ''}`
+        ? `${address.street}, ${address.number}${address.complement ? ` - ${address.complement}` : ''}, ${address.neighborhood}${address.cep ? ` - CEP ${address.cep}` : ''}${address.reference ? ` (Ref: ${address.reference})` : ''}`
         : null;
 
       const rpcParams = {
@@ -165,8 +167,9 @@ export function PaymentDrawer({
 
       if (error) {
         logger.error("Error submitting order:", error);
+        const translatedError = translateError(error);
         toast.error("Erro ao enviar pedido", {
-          description: error.message || "Tente novamente mais tarde",
+          description: translatedError,
         });
         return;
       }
@@ -174,8 +177,9 @@ export function PaymentDrawer({
       const result = data as { success: boolean; error?: string; order_id?: string; order_number?: string; total?: number };
 
       if (!result.success) {
+        const translatedError = translateError(result.error);
         toast.error("Erro ao enviar pedido", {
-          description: result.error || "Tente novamente",
+          description: translatedError,
         });
         return;
       }
@@ -273,8 +277,9 @@ export function PaymentDrawer({
       navigate(`/pedido?${params.toString()}`);
     } catch (err) {
       logger.error("Error submitting order:", err);
+      const translatedError = translateError(err);
       toast.error("Erro ao enviar pedido", {
-        description: "Tente novamente mais tarde",
+        description: translatedError,
       });
     } finally {
       setIsSubmitting(false);

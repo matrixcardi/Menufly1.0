@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
-import { CheckCircle2, Clock, ChefHat, Truck, Package, MessageCircle, Timer, XCircle, Ban } from "lucide-react";
+import { CheckCircle2, Clock, ChefHat, Truck, Package, MessageCircle, Timer, XCircle, Ban, MapPin } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -11,8 +11,6 @@ interface OrderStatus {
   completed: boolean;
   current: boolean;
 }
-
-
 
 const deliveryStatusToStep: Record<string, number> = {
   pending: 1,
@@ -52,10 +50,13 @@ export default function OrderConfirmation() {
   const [restaurantName, setRestaurantName] = useState("Restaurante");
   const [restaurantSlug, setRestaurantSlug] = useState<string | null>(slugFromUrl);
   const [restaurantWhatsapp, setRestaurantWhatsapp] = useState<string | null>(null);
+  const [restaurantAddress, setRestaurantAddress] = useState<string | null>(null);
+  const [restaurantGoogleMapsUrl, setRestaurantGoogleMapsUrl] = useState<string | null>(null);
   const [deliveryMethod, setDeliveryMethod] = useState(deliveryMethodParam);
   const [estimatedTime, setEstimatedTime] = useState<string | null>(null);
   const [orderCreatedAt, setOrderCreatedAt] = useState<string | null>(null);
   const [cancellationReason, setCancellationReason] = useState<string | null>(null);
+  const [orderUuid, setOrderUuid] = useState<string | null>(null);
 
   useEffect(() => {
     window.scrollTo(0, 0);
@@ -63,16 +64,18 @@ export default function OrderConfirmation() {
     return () => clearTimeout(timer);
   }, []);
 
-  // Fetch order status and subscribe to realtime updates
+  // Fetch inicial do pedido + dados do restaurante
   useEffect(() => {
     async function fetchOrder() {
+      console.log('🔵 CLIENT: Buscando pedido', orderId);
       const { data: order } = await supabase
         .from("orders")
-        .select("status, restaurant_id, delivery_type, created_at, cancellation_reason")
+        .select("id, status, restaurant_id, delivery_type, created_at, cancellation_reason")
         .eq("order_number", orderId)
         .maybeSingle();
 
       if (order) {
+        setOrderUuid(order.id);
         const orderDeliveryMethod = order.delivery_type === "pickup" ? "pickup" : "delivery";
         setDeliveryMethod(orderDeliveryMethod);
         setOrderCreatedAt(order.created_at);
@@ -81,10 +84,10 @@ export default function OrderConfirmation() {
         const stepMap = orderDeliveryMethod === "pickup" ? pickupStatusToStep : deliveryStatusToStep;
         setCurrentStep(stepMap[order.status] || 1);
 
-        // Fetch restaurant name
+        // Fetch dados do restaurante
         const { data: restaurant } = await supabase
           .from("restaurants")
-          .select("name, slug, whatsapp_phone, default_delivery_time_min")
+          .select("name, slug, whatsapp_phone, default_delivery_time_min, address_street, address_number, address_neighborhood, address_city, address_state, address_cep, address, google_maps_url")
           .eq("id", order.restaurant_id)
           .maybeSingle();
 
@@ -92,8 +95,23 @@ export default function OrderConfirmation() {
           setRestaurantName(restaurant.name);
           setRestaurantSlug(restaurant.slug);
           setRestaurantWhatsapp((restaurant as any).whatsapp_phone || null);
+          setRestaurantGoogleMapsUrl((restaurant as any).google_maps_url || null);
           
-          // Calculate estimated delivery time
+          const addressParts = [
+            (restaurant as any).address_street,
+            (restaurant as any).address_number,
+            (restaurant as any).address_neighborhood,
+            (restaurant as any).address_city,
+            (restaurant as any).address_state,
+            (restaurant as any).address_cep
+          ].filter(Boolean);
+          
+          const fullAddress = addressParts.length > 0 
+            ? addressParts.join(', ')
+            : (restaurant as any).address || null;
+          
+          setRestaurantAddress(fullAddress);
+          
           const deliveryTimeMin = (restaurant as any).default_delivery_time_min;
           if (deliveryTimeMin && order.created_at) {
             const createdAt = new Date(order.created_at);
@@ -108,35 +126,52 @@ export default function OrderConfirmation() {
 
     fetchOrder();
 
-    // Poll every 5 seconds as fallback for realtime
-    const pollInterval = setInterval(fetchOrder, 5000);
+    // Polling de segurança a cada 10 segundos (caso o realtime falhe)
+    const pollInterval = setInterval(fetchOrder, 10000);
 
-    // Subscribe to realtime updates for this specific order
+    return () => {
+      clearInterval(pollInterval);
+    };
+  }, [orderId]);
+
+  // REALTIME — Só inicia depois que tem o UUID do pedido
+  useEffect(() => {
+    if (!orderUuid) return;
+
+    console.log('📡 CLIENT: Inscrevendo no realtime para UUID:', orderUuid);
+    
     const channel = supabase
-      .channel(`order-${orderId}-${Date.now()}`)
+      .channel(`order-update-${orderUuid}`)
       .on(
         "postgres_changes",
         {
           event: "UPDATE",
           schema: "public",
           table: "orders",
-          filter: `order_number=eq.${orderId}`,
+          filter: `id=eq.${orderUuid}`,
         },
         (payload) => {
-          const newRecord = payload.new as { status: string; cancellation_reason?: string };
+          console.log('🟢 CLIENT EVENT RECEIVED:', payload);
+          const newRecord = payload.new as { status: string; cancellation_reason?: string; delivery_type?: string };
+          
           setOrderStatus(newRecord.status);
           setCancellationReason(newRecord.cancellation_reason || null);
-          const stepMap = deliveryMethod === "pickup" ? pickupStatusToStep : deliveryStatusToStep;
+          
+          const currentDeliveryMethod = newRecord.delivery_type === "pickup" ? "pickup" : "delivery";
+          const stepMap = currentDeliveryMethod === "pickup" ? pickupStatusToStep : deliveryStatusToStep;
           setCurrentStep(stepMap[newRecord.status] || 1);
         }
       )
-      .subscribe();
+      .subscribe((status, err) => {
+        console.log('📡 CLIENT REALTIME STATUS:', status);
+        if (err) console.error('❌ CLIENT REALTIME ERROR:', err);
+      });
 
     return () => {
-      clearInterval(pollInterval);
+      console.log('🔵 CLIENT: Desinscrevendo do canal realtime');
       supabase.removeChannel(channel);
     };
-  }, [orderId, deliveryMethod]);
+  }, [orderUuid]);
 
   const statuses: OrderStatus[] = deliveryMethod === "pickup"
     ? [
@@ -213,6 +248,15 @@ export default function OrderConfirmation() {
       `Fiz um pedido pelo menufly, quero acompanhar meu pedido #${orderId}`
     );
     window.open(`https://wa.me/${restaurantWhatsapp}?text=${message}`, "_blank");
+  };
+
+  const handleGoogleMapsClick = () => {
+    if (restaurantGoogleMapsUrl) {
+      window.open(restaurantGoogleMapsUrl, "_blank");
+    } else if (restaurantAddress) {
+      const encodedAddress = encodeURIComponent(restaurantAddress);
+      window.open(`https://www.google.com/maps/search/?api=1&query=${encodedAddress}`, "_blank");
+    }
   };
 
   const formatCurrency = (value: string) => {
@@ -361,21 +405,37 @@ export default function OrderConfirmation() {
           </div>
         )}
 
-        {/* WhatsApp Button */}
-        {restaurantWhatsapp && (
+        {/* Google Maps Button for Pickup / WhatsApp Button for Delivery */}
+        {deliveryMethod === "pickup" ? (
           <Button
-            onClick={handleWhatsAppClick}
-            className="w-full h-14 text-base font-bold bg-[#25D366] hover:bg-[#25D366]/90 text-white gap-3"
+            onClick={handleGoogleMapsClick}
+            className="w-full h-14 text-base font-bold bg-blue-500 hover:bg-blue-600 text-white gap-3"
           >
-            <MessageCircle className="w-6 h-6" />
-            Quero acompanhar pelo WhatsApp
+            <MapPin className="w-6 h-6" />
+            Ver no Google Maps
           </Button>
+        ) : (
+          restaurantWhatsapp && (
+            <Button
+              onClick={handleWhatsAppClick}
+              className="w-full h-14 text-base font-bold bg-[#25D366] hover:bg-[#25D366]/90 text-white gap-3"
+            >
+              <MessageCircle className="w-6 h-6" />
+              Quero acompanhar pelo WhatsApp
+            </Button>
+          )
         )}
 
         {/* Back to Menu */}
         <button
-          onClick={() => navigate(restaurantSlug ? `/${restaurantSlug}` : "/menu")}
-          className="w-full text-center text-sm text-muted-foreground hover:text-foreground transition-colors py-2"
+          onClick={() => {
+            if (restaurantSlug) {
+              navigate(`/${restaurantSlug}`);
+            } else {
+              navigate("/");
+            }
+          }}
+          className="w-full h-14 text-base font-bold bg-[#F5A623] hover:bg-[#E0951F] text-white rounded-lg transition-colors"
         >
           Voltar ao cardápio
         </button>

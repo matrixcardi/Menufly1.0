@@ -113,20 +113,36 @@ export default function AdminDelivery() {
 
   async function fetchData() {
     setLoading(true);
-    
+
+    console.log("=== FETCH DATA START ===");
+    console.log("selectedRestaurantId:", selectedRestaurantId);
+    console.log("selectedRestaurantIds:", selectedRestaurantIds);
+    console.log("ctxRestaurantId:", ctxRestaurantId);
+
     if (!ctxRestaurantId) {
+      console.log("No ctxRestaurantId, cannot fetch data");
+      toast({ title: "Nenhum restaurante selecionado", description: "Selecione um restaurante para configurar a entrega", variant: "destructive" });
       setLoading(false);
       return;
     }
 
-    const { data: restaurantData } = await supabase
+    console.log("Fetching restaurant data for ID:", ctxRestaurantId);
+    const { data: restaurantData, error: restaurantError } = await supabase
       .from("restaurants")
       .select("id, address, delivery_mode, default_delivery_time_min, default_delivery_fee, restaurant_lat, restaurant_lng, address_cep, address_street, address_number, address_complement, address_neighborhood, address_city, address_state")
       .eq("id", ctxRestaurantId)
       .maybeSingle();
 
+    if (restaurantError) {
+      console.error("Error loading restaurant data:", restaurantError);
+      toast({ title: "Erro ao carregar restaurante", description: restaurantError.message, variant: "destructive" });
+      setLoading(false);
+      return;
+    }
+
     if (restaurantData) {
       const r = restaurantData as Restaurant;
+      console.log("Restaurant data loaded:", r);
       setRestaurant(r);
       setDeliveryMode(r.delivery_mode || "zones");
       setDefaultTime(r.default_delivery_time_min?.toString() || "");
@@ -150,6 +166,9 @@ export default function AdminDelivery() {
       if (zonesData) {
         setZones(zonesData as DeliveryZone[]);
       }
+    } else {
+      console.log("No restaurant data found");
+      toast({ title: "Restaurante não encontrado", description: "O restaurante selecionado não existe ou não está disponível", variant: "destructive" });
     }
 
     setLoading(false);
@@ -279,21 +298,38 @@ export default function AdminDelivery() {
   const bulkCount = editingZone ? 0 : parseBulkNames(zoneName).length;
 
   async function saveZone() {
-    if (!restaurant) return;
+    console.log("=== SAVE ZONE START ===");
+    console.log("restaurant:", restaurant);
+    console.log("deliveryMode:", deliveryMode);
+    console.log("zoneName:", zoneName);
+    console.log("zoneFee:", zoneFee);
+    console.log("zoneCity:", zoneCity);
+    console.log("zoneTime:", zoneTime);
+    console.log("zoneMinRadius:", zoneMinRadius);
+    console.log("zoneMaxRadius:", zoneMaxRadius);
+    console.log("editingZone:", editingZone);
+
+    if (!restaurant) {
+      console.log("No restaurant, returning");
+      return;
+    }
 
     // Validation differs by mode
     if (deliveryMode === "radius") {
       if (!zoneName || !zoneFee || !zoneMaxRadius) {
+        console.log("Validation failed for radius mode");
         toast({ title: "Preencha nome, raio máximo e taxa", variant: "destructive" });
         return;
       }
     } else {
       if (!zoneName || !zoneFee) {
+        console.log("Validation failed for neighborhood mode");
         toast({ title: "Preencha os campos obrigatórios", variant: "destructive" });
         return;
       }
     }
 
+    console.log("Validation passed, setting saving to true");
     setSaving(true);
 
     if (deliveryMode === "radius") {
@@ -309,14 +345,30 @@ export default function AdminDelivery() {
         estimated_time_min: zoneTime ? parseInt(zoneTime) : null,
       };
 
+      console.log("Radius zone data:", zoneData);
+
       if (editingZone) {
+        console.log("Updating existing zone:", editingZone.id);
         const { error } = await supabase.from("delivery_zones").update(zoneData).eq("id", editingZone.id);
-        if (error) toast({ title: "Erro ao salvar", description: error.message, variant: "destructive" });
-        else toast({ title: "Faixa atualizada!" });
+        if (error) {
+          console.log("Update error:", error);
+          toast({ title: "Erro ao salvar", description: error.message, variant: "destructive" });
+        }
+        else {
+          console.log("Update successful");
+          toast({ title: "Faixa atualizada!" });
+        }
       } else {
+        console.log("Inserting new zone");
         const { error } = await supabase.from("delivery_zones").insert(zoneData);
-        if (error) toast({ title: "Erro ao criar", description: error.message, variant: "destructive" });
-        else toast({ title: "Faixa adicionada!" });
+        if (error) {
+          console.log("Insert error:", error);
+          toast({ title: "Erro ao criar", description: error.message, variant: "destructive" });
+        }
+        else {
+          console.log("Insert successful");
+          toast({ title: "Faixa adicionada!" });
+        }
       }
     } else {
       // Neighborhood zone save
@@ -331,11 +383,20 @@ export default function AdminDelivery() {
           max_radius_km: null,
           estimated_time_min: zoneTime ? parseInt(zoneTime) : null,
         };
+
+        console.log("Neighborhood zone data (edit):", zoneData);
         const { error } = await supabase.from("delivery_zones").update(zoneData).eq("id", editingZone.id);
-        if (error) toast({ title: "Erro ao salvar zona", description: error.message, variant: "destructive" });
-        else toast({ title: "Zona atualizada!" });
+        if (error) {
+          console.log("Update error:", error);
+          toast({ title: "Erro ao salvar zona", description: error.message, variant: "destructive" });
+        }
+        else {
+          console.log("Update successful");
+          toast({ title: "Zona atualizada!" });
+        }
       } else {
         const names = parseBulkNames(zoneName);
+        console.log("Parsed neighborhood names:", names);
         const rows = names.map(name => ({
           restaurant_id: restaurant.id,
           zone_type: "neighborhood" as const,
@@ -346,12 +407,21 @@ export default function AdminDelivery() {
           max_radius_km: null,
           estimated_time_min: zoneTime ? parseInt(zoneTime) : null,
         }));
+
+        console.log("Neighborhood zone rows to insert:", rows);
         const { error } = await supabase.from("delivery_zones").insert(rows);
-        if (error) toast({ title: "Erro ao salvar zonas", description: error.message, variant: "destructive" });
-        else toast({ title: `${names.length} bairro(s) adicionado(s)!` });
+        if (error) {
+          console.log("Insert error:", error);
+          toast({ title: "Erro ao salvar zonas", description: error.message, variant: "destructive" });
+        }
+        else {
+          console.log("Insert successful");
+          toast({ title: `${names.length} bairro(s) adicionado(s)!` });
+        }
       }
     }
 
+    console.log("Setting saving to false and closing dialog");
     setSaving(false);
     setDialogOpen(false);
     fetchData();
@@ -601,7 +671,7 @@ export default function AdminDelivery() {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div className="space-y-2">
               <Label>Tempo médio de entrega (opcional)</Label>
               <div className="flex items-center gap-2">

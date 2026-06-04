@@ -41,8 +41,29 @@ function isPromoCurrentlyActive(promo: PromoKit): boolean {
   if (promo.schedule_type === "always") return true;
 
   const now = new Date();
-  const currentDay = now.getDay();
-  const currentTime = `${now.getHours().toString().padStart(2, "0")}:${now.getMinutes().toString().padStart(2, "0")}`;
+  const currentTimeInBrasilia = now.toLocaleTimeString('pt-BR', {
+    timeZone: 'America/Sao_Paulo',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  });
+  const currentDayInBrasilia = now.toLocaleDateString('pt-BR', {
+    timeZone: 'America/Sao_Paulo',
+    weekday: 'long'
+  });
+  
+  // Convert day name to number (0 = Sunday, 6 = Saturday)
+  const dayNameToNumber: Record<string, number> = {
+    'domingo': 0,
+    'segunda-feira': 1,
+    'terça-feira': 2,
+    'quarta-feira': 3,
+    'quinta-feira': 4,
+    'sexta-feira': 5,
+    'sábado': 6
+  };
+  const currentDay = dayNameToNumber[currentDayInBrasilia.toLowerCase()] || now.getDay();
+  const currentTime = currentTimeInBrasilia;
 
   let dayMatch = true;
   let timeMatch = true;
@@ -58,7 +79,12 @@ function isPromoCurrentlyActive(promo: PromoKit): boolean {
   }
 
   if (promo.schedule_type === "specific_date" || promo.schedule_type === "both") {
-    const today = now.toISOString().split("T")[0];
+    const today = now.toLocaleDateString('en-CA', {
+      timeZone: 'America/Sao_Paulo',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    });
     if (promo.schedule_start_date) dateMatch = today >= promo.schedule_start_date;
     if (promo.schedule_end_date) dateMatch = dateMatch && today <= promo.schedule_end_date;
   }

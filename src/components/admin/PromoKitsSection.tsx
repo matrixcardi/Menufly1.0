@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { CurrencyInput } from "@/components/ui/currency-input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
@@ -466,7 +467,7 @@ export function PromoKitsSection({ restaurantId }: PromoKitsSectionProps) {
             {form.promo_type !== "auto_discount" ? (
               <div className="space-y-2">
                 <Label>Preço do kit (R$) *</Label>
-                <Input type="number" step="0.01" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} placeholder="Ex: 49.90" />
+                <CurrencyInput value={typeof form.price === 'string' ? parseFloat(form.price) || 0 : form.price} onChange={(value) => setForm({ ...form, price: value })} placeholder="Ex: 49,90" />
               </div>
             ) : (
               <div className="grid grid-cols-2 gap-4">
@@ -482,7 +483,11 @@ export function PromoKitsSection({ restaurantId }: PromoKitsSectionProps) {
                 </div>
                 <div className="space-y-2">
                   <Label>Valor do desconto *</Label>
-                  <Input type="number" step="0.01" value={form.discount_value} onChange={(e) => setForm({ ...form, discount_value: e.target.value })} placeholder={form.discount_type === "percentage" ? "Ex: 15" : "Ex: 10.00"} />
+                  {form.discount_type === "fixed" ? (
+                    <CurrencyInput value={typeof form.discount_value === 'string' ? parseFloat(form.discount_value) || 0 : form.discount_value} onChange={(value) => setForm({ ...form, discount_value: value })} placeholder="Ex: 10,00" />
+                  ) : (
+                    <Input type="number" step="0.01" value={form.discount_value} onChange={(e) => setForm({ ...form, discount_value: e.target.value })} placeholder="Ex: 15" />
+                  )}
                 </div>
               </div>
             )}

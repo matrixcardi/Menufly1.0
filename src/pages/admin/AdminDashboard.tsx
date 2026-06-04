@@ -3,6 +3,7 @@ import { useRestaurantContext } from "@/contexts/RestaurantContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { CurrencyInput } from "@/components/ui/currency-input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
@@ -643,14 +644,12 @@ export default function AdminDashboard() {
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label>Preço (R$) *</Label>
-                      <Input
-                        type="number"
-                        step="0.01"
-                        value={productForm.price}
-                        onChange={(e) =>
-                          setProductForm({ ...productForm, price: e.target.value })
+                      <CurrencyInput
+                        value={typeof productForm.price === 'string' ? parseFloat(productForm.price) || 0 : productForm.price}
+                        onChange={(value) =>
+                          setProductForm({ ...productForm, price: value })
                         }
-                        placeholder="0.00"
+                        placeholder="0,00"
                       />
                     </div>
                     <div className="space-y-2">

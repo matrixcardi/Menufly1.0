@@ -4,6 +4,7 @@ import { useRestaurantContext } from "@/contexts/RestaurantContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { PhoneInput } from "@/components/ui/phone-input";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
@@ -687,7 +688,7 @@ export default function AdminFornecedores() {
             </div>
             <div className="space-y-2">
               <Label>Telefone</Label>
-              <Input value={form.phone} onChange={(e) => setForm((p) => ({ ...p, phone: e.target.value }))} placeholder="(51) 99999-9999" />
+              <PhoneInput value={form.phone} onChange={(value) => setForm((p) => ({ ...p, phone: value }))} placeholder="(11) 9 9999-9999" />
             </div>
 
             <div className="space-y-2">

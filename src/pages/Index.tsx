@@ -28,8 +28,18 @@ const Index = () => {
   
   const categoryTabsRef = useRef<HTMLDivElement>(null);
   
-  const { addItem } = useCart();
-  const { restaurant, isCurrentlyOpen, nextOpenTime, isClosingSoon, minutesUntilClose, menuTheme, categories, products, productCategoryLinks, loading } = useRestaurantStatus(restaurantId);
+  const { addItem, restaurantSlug: cartSlug } = useCart();
+  
+  // Use restaurantSlug from cart context as fallback if no query param
+  const effectiveRestaurantId = restaurantId || undefined;
+  const { restaurant, isCurrentlyOpen, nextOpenTime, isClosingSoon, minutesUntilClose, menuTheme, categories, products, productCategoryLinks, loading } = useRestaurantStatus(effectiveRestaurantId);
+
+  // Redirect to slug-based route if we have a slug but no query param
+  useEffect(() => {
+    if (cartSlug && !restaurantId) {
+      window.location.href = `/${cartSlug}`;
+    }
+  }, [cartSlug, restaurantId]);
 
   // Set first category as active when categories load
   useEffect(() => {

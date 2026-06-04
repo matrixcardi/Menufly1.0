@@ -73,19 +73,55 @@ export default function AdminSubscription() {
     setPortalLoading(true);
     try {
       const { data: result, error } = await supabase.functions.invoke("customer-portal");
+      
+      if (error) {
+        console.error("[DEBUG] Erro ao invocar customer-portal:", error);
+        throw new Error(error.message || "Erro ao conectar com o servidor");
+      }
+      
       if (result?.error === "no_subscription") {
         toast({
           title: "Sem assinatura ativa",
           description: result.message || "Assine um plano para gerenciá-lo.",
+          variant: "destructive",
         });
         return;
       }
-      if (error) throw error;
+      
+      if (result?.error) {
+        console.error("[DEBUG] Erro retornado pela função:", result.error);
+        throw new Error(result.error);
+      }
+      
       if (result?.url) {
         window.open(result.url, "_blank");
+      } else {
+        throw new Error("URL do portal não retornada pelo servidor");
       }
-    } catch {
-      toast({ title: "Erro ao abrir portal de pagamentos", variant: "destructive" });
+    } catch (err: any) {
+      console.error("[DEBUG] Erro completo ao abrir portal:", err);
+      const errorMessage = err?.message || "Erro ao abrir portal de pagamentos";
+      
+      // Mensagens específicas baseadas no erro
+      if (errorMessage.includes("404") || errorMessage.includes("no_subscription")) {
+        toast({
+          title: "Assinatura não encontrada",
+          description: "Você ainda não tem uma assinatura ativa no Stripe. Assine um plano para gerenciá-lo.",
+          variant: "destructive",
+        });
+      } else if (errorMessage.includes("STRIPE_SECRET_KEY")) {
+        toast({
+          title: "Erro de configuração",
+          description: "O Stripe não está configurado corretamente. Entre em contato com o suporte.",
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Erro ao abrir portal",
+          description: errorMessage,
+          variant: "destructive",
+        });
+      }
     } finally {
       setPortalLoading(false);
     }

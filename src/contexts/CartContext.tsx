@@ -27,12 +27,14 @@ interface CartContextType {
   items: CartItem[];
   coupon: Coupon | null;
   restaurantId: string | null;
+  restaurantSlug: string | null;
   addItem: (product: Product, quantity: number, addons: SelectedAddons, addonsTotal: number, notes?: string, addonNames?: Record<string, string>, promoId?: string) => void;
   activePromoId: string | null;
   removeItem: (itemId: string) => void;
   updateQuantity: (itemId: string, quantity: number) => void;
   applyCoupon: (coupon: Coupon | null) => void;
   setRestaurantId: (id: string) => void;
+  setRestaurantSlug: (slug: string) => void;
   clearCart: () => void;
   subtotal: number;
   discount: number;
@@ -49,9 +51,77 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<CartItem[]>([]);
   const [coupon, setCoupon] = useState<Coupon | null>(null);
   const [restaurantId, setRestaurantId] = useState<string | null>(null);
+  const [restaurantSlug, setRestaurantSlug] = useState<string | null>(null);
   const [productCategories, setProductCategories] = useState<Record<string, string[]>>({});
 
   const autoPromos = useAutoPromos(restaurantId);
+
+  // Save cart to localStorage whenever it changes
+  useEffect(() => {
+    if (!restaurantSlug) return;
+    
+    const cartData = {
+      items,
+      coupon,
+      timestamp: Date.now(),
+    };
+    
+    localStorage.setItem(`cart_${restaurantSlug}`, JSON.stringify(cartData));
+  }, [items, coupon, restaurantSlug]);
+
+  // Load cart from localStorage on mount
+  useEffect(() => {
+    if (!restaurantSlug) return;
+
+    const savedCart = localStorage.getItem(`cart_${restaurantSlug}`);
+    if (!savedCart) return;
+
+    try {
+      const cartData = JSON.parse(savedCart);
+      
+      // Check if cart is older than 24 hours
+      const CART_EXPIRATION_MS = 24 * 60 * 60 * 1000; // 24 hours
+      if (Date.now() - cartData.timestamp > CART_EXPIRATION_MS) {
+        localStorage.removeItem(`cart_${restaurantSlug}`);
+        return;
+      }
+
+      // Validate products still exist and are active
+      const validateAndRestoreCart = async () => {
+        if (!restaurantId) return;
+
+        const productIds = cartData.items.map((item: CartItem) => item.product.id);
+        
+        const { data: products } = await supabase
+          .from("products")
+          .select("id, is_active")
+          .in("id", productIds);
+
+        if (!products) return;
+
+        const activeProductIds = new Set(
+          products.filter((p: any) => p.is_active).map((p: any) => p.id)
+        );
+
+        // Filter out items with inactive or deleted products
+        const validItems = cartData.items.filter((item: CartItem) =>
+          activeProductIds.has(item.product.id)
+        );
+
+        if (validItems.length > 0) {
+          setItems(validItems);
+          if (cartData.coupon) {
+            setCoupon(cartData.coupon);
+          }
+        }
+      };
+
+      validateAndRestoreCart();
+    } catch (error) {
+      console.error("Error loading cart from localStorage:", error);
+      localStorage.removeItem(`cart_${restaurantSlug}`);
+    }
+  }, [restaurantSlug, restaurantId]);
 
   // Fetch product-category mappings when items change
   useEffect(() => {
@@ -137,11 +207,13 @@ export function CartProvider({ children }: { children: ReactNode }) {
         items,
         coupon,
         restaurantId,
+        restaurantSlug,
         addItem,
         removeItem,
         updateQuantity,
         applyCoupon,
         setRestaurantId,
+        setRestaurantSlug,
         clearCart,
         subtotal,
         discount,

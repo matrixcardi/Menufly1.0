@@ -65,12 +65,17 @@ export function RestaurantProvider({ children, user, isCollaborator, isMaster, c
   };
 
   const [restaurants, setRestaurants] = useState<AdminRestaurant[]>([]);
-  const [selectedRestaurantId, setSelectedRestaurantId] = useState<string | "all">(() => {
-    return localStorage.getItem("selectedRestaurantId") || "all";
-  });
+  const [selectedRestaurantId, setSelectedRestaurantId] = useState<string | "all">("all");
   const [loading, setLoading] = useState(true);
 
   const fetchRestaurants = async () => {
+    console.log("[RestaurantContext] fetchRestaurants called", { 
+      userId: user.id, 
+      isMaster, 
+      isCollaborator, 
+      collabRestaurantId 
+    });
+
     if (isMaster) {
       const managedRestaurantId = getMasterManagedRestaurantId();
       const isMasterManaging = typeof window !== "undefined" && localStorage.getItem("masterManaging") === "true";
@@ -112,24 +117,45 @@ export function RestaurantProvider({ children, user, isCollaborator, isMaster, c
 
       setRestaurants((data as AdminRestaurant[]) || []);
     } else if (isCollaborator && collabRestaurantId) {
-      const { data } = await supabase
+      console.log("[RestaurantContext] Fetching collaborator restaurant", { collabRestaurantId });
+      const { data, error } = await supabase
         .from("restaurants")
         .select(RESTAURANT_SELECT)
         .eq("id", collabRestaurantId);
-      setRestaurants((data as AdminRestaurant[]) || []);
+      
+      if (error) {
+        console.error("[RestaurantContext] Error fetching collaborator restaurant:", error);
+      }
+      
+      const list = (data as AdminRestaurant[]) || [];
+      console.log("[RestaurantContext] Collaborator restaurant found:", list.length);
+      setRestaurants(list);
     } else {
       // Fetch owned restaurants
-      const { data: owned } = await supabase
+      console.log("[RestaurantContext] Fetching owned restaurants for user_id:", user.id);
+      const { data: owned, error: ownedError } = await supabase
         .from("restaurants")
         .select(RESTAURANT_SELECT)
         .eq("user_id", user.id)
         .order("created_at", { ascending: true });
 
+      if (ownedError) {
+        console.error("[RestaurantContext] Error fetching owned restaurants:", ownedError);
+      }
+
+      console.log("[RestaurantContext] Owned restaurants found:", (owned || []).length);
+
       // Fetch linked (collaborated) restaurants
-      const { data: collabLinks } = await supabase
+      const { data: collabLinks, error: collabError } = await supabase
         .from("restaurant_collaborators")
         .select("restaurant_id")
         .eq("user_id", user.id);
+
+      if (collabError) {
+        console.error("[RestaurantContext] Error fetching collaborator links:", collabError);
+      }
+
+      console.log("[RestaurantContext] Collaborator links found:", (collabLinks || []).length);
 
       let linked: AdminRestaurant[] = [];
       if (collabLinks && collabLinks.length > 0) {
@@ -147,7 +173,16 @@ export function RestaurantProvider({ children, user, isCollaborator, isMaster, c
         }
       }
 
-      setRestaurants([...(owned as AdminRestaurant[] || []), ...linked]);
+      const allRestaurants = [...(owned as AdminRestaurant[] || []), ...linked];
+      console.log("[RestaurantContext] Total restaurants for user:", allRestaurants.length);
+      
+      if (allRestaurants.length === 0) {
+        console.error("[RestaurantContext] NO RESTAURANTS FOUND FOR USER:", user.id);
+        console.error("[RestaurantContext] User email:", user.email);
+        console.error("[RestaurantContext] Please check if restaurants table has user_id set correctly");
+      }
+      
+      setRestaurants(allRestaurants);
     }
     setLoading(false);
   };
@@ -166,10 +201,11 @@ export function RestaurantProvider({ children, user, isCollaborator, isMaster, c
     return () => { supabase.removeChannel(channel); };
   }, [user.id, isCollaborator, isMaster, collabRestaurantId]);
 
-  // Persist selection
+  // Persist selection (only for non-master users to avoid cross-session issues)
   useEffect(() => {
     const managedRestaurantId = getMasterManagedRestaurantId();
     if (isMaster && managedRestaurantId) return;
+    if (isMaster) return; // Don't persist for master users
     localStorage.setItem("selectedRestaurantId", selectedRestaurantId);
   }, [selectedRestaurantId, isMaster]);
 

@@ -74,6 +74,12 @@ function isTimeInRange(currentTime: string, openTime: string, closeTime: string)
   const open = openHour * 60 + openMin;
   const close = closeHour * 60 + closeMin;
 
+  // Handle 00:00 as midnight (end of day, not start)
+  if (close === 0) {
+    // If closing time is 00:00, treat it as 24:00 (end of day)
+    return current >= open && current < 24 * 60;
+  }
+
   // Handle overnight hours (e.g., 22:00 - 02:00)
   if (close < open) {
     return current >= open || current < close;
@@ -111,14 +117,9 @@ export function useRestaurantStatus(restaurantId?: string): RestaurantStatus {
           .maybeSingle();
         restaurantData = data;
       } else {
-        // Fetch first open restaurant (for public menu)
-        const { data } = await supabase
-          .from("restaurants")
-          .select("*")
-          .eq("is_open", true)
-          .limit(1)
-          .maybeSingle();
-        restaurantData = data;
+        // No restaurant ID provided - return null to prevent loading wrong restaurant
+        // The component should handle this case (e.g., redirect to slug-based route)
+        restaurantData = null;
       }
 
       if (restaurantData) {
@@ -199,10 +200,35 @@ export function useRestaurantStatus(restaurantId?: string): RestaurantStatus {
       return { isOpen: restaurant.is_open, closingSoon: false, minutesUntilClose: null, nextOpen: null };
     }
 
+    // Get current time in America/Sao_Paulo timezone
     const now = new Date();
-    const currentDay = now.getDay(); // 0 = Sunday, 6 = Saturday
-    const currentTime = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
-    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+    const currentTimeInBrasilia = now.toLocaleTimeString('pt-BR', {
+      timeZone: 'America/Sao_Paulo',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false
+    });
+    const currentDayInBrasilia = now.toLocaleDateString('pt-BR', {
+      timeZone: 'America/Sao_Paulo',
+      weekday: 'long'
+    });
+    
+    // Convert day name to number (0 = Sunday, 6 = Saturday)
+    const dayNameToNumber: Record<string, number> = {
+      'domingo': 0,
+      'segunda-feira': 1,
+      'terça-feira': 2,
+      'quarta-feira': 3,
+      'quinta-feira': 4,
+      'sexta-feira': 5,
+      'sábado': 6
+    };
+    const currentDay = dayNameToNumber[currentDayInBrasilia.toLowerCase()] || now.getDay();
+    const currentTime = currentTimeInBrasilia;
+    const [currentHour, currentMin] = currentTime.split(':').map(Number);
+    const currentMinutes = currentHour * 60 + currentMin;
+
+    console.log('useRestaurantStatus - Hora Brasília:', currentTime, 'Dia:', currentDayInBrasilia, 'Dia num:', currentDay);
 
     // Get today's hours
     const todayHours = businessHours.filter(h => h.day_of_week === currentDay && h.is_open);

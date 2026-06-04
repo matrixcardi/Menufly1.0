@@ -101,7 +101,7 @@ export function RestaurantHeader({ restaurant, isCurrentlyOpen = true, nextOpenT
 
       {/* Closed Warning */}
       {!isCurrentlyOpen && (
-        <div className="mx-4 mt-4 py-2 px-3 bg-amber-500/10 text-amber-600 dark:text-amber-400 rounded-lg text-sm text-center font-medium">
+        <div className="mx-4 mt-4 mb-4 py-2 px-3 bg-amber-500/10 text-amber-600 dark:text-amber-400 rounded-lg text-sm text-center font-medium">
           {nextOpenTime ? `Loja fechada, abre ${nextOpenTime}` : "Loja fechada no momento"}
         </div>
       )}

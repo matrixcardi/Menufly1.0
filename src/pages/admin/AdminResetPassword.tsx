@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Lock, Loader2, CheckCircle } from "lucide-react";
 import menuFlyLogo from "@/assets/menufly-logo-official.png";
+import { translateError } from "@/lib/error-messages";
 
 export default function AdminResetPassword() {
   const [password, setPassword] = useState("");
@@ -69,9 +70,10 @@ export default function AdminResetPassword() {
         description: "Sua senha foi atualizada com sucesso.",
       });
     } catch (error: any) {
+      const translatedError = translateError(error);
       toast({
-        title: "Erro",
-        description: error.message || "Não foi possível alterar a senha. Tente novamente.",
+        title: "Erro ao alterar senha",
+        description: translatedError,
         variant: "destructive",
       });
     } finally {

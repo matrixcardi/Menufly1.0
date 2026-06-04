@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { CurrencyInput } from "@/components/ui/currency-input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -586,12 +587,10 @@ export default function AddonGroupsSection({ restaurantId }: AddonGroupsSectionP
             </div>
             <div className="space-y-2">
               <Label>Preço (R$)</Label>
-              <Input
-                type="number"
-                step="0.01"
-                value={itemForm.price}
-                onChange={(e) => setItemForm({ ...itemForm, price: e.target.value })}
-                placeholder="0.00"
+              <CurrencyInput
+                value={typeof itemForm.price === 'string' ? parseFloat(itemForm.price) || 0 : itemForm.price}
+                onChange={(value) => setItemForm({ ...itemForm, price: value })}
+                placeholder="0,00"
               />
             </div>
             <div className="space-y-2">

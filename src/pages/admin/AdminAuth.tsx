@@ -8,6 +8,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Mail, Lock, Loader2, Shield, Users, Eye, EyeOff } from "lucide-react";
 import menuFlyLogo from "@/assets/menufly-logo-official.png";
 import { performCleanSignOut, clearLocalAuthState } from "@/lib/auth-cleanup";
+import { translateError } from "@/lib/error-messages";
 
 type LoginMode = "admin" | "collaborator";
 
@@ -31,22 +32,36 @@ export default function AdminAuth() {
       // Evita "2 contas conectadas", tokens corrompidos e contaminação de localStorage.
       await performCleanSignOut();
 
+      console.log("[DEBUG] Tentando login com:", { email, loginMode });
+
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
-      if (error) throw error;
+
+      console.log("[DEBUG] Resultado do login:", { data, error });
+
+      if (error) {
+        console.log("[DEBUG] Erro do Supabase Auth:", error.message);
+        throw error;
+      }
+
+      console.log("[DEBUG] Usuário autenticado:", data.user.id);
 
       if (loginMode === "collaborator") {
         // Verify collaborator role
-        const { data: role } = await supabase
+        console.log("[DEBUG] Verificando role de colaborador para user_id:", data.user.id);
+        const { data: role, error: roleError } = await supabase
           .from("user_roles")
           .select("role")
           .eq("user_id", data.user.id)
           .eq("role", "collaborator")
           .maybeSingle();
 
+        console.log("[DEBUG] Resultado da verificação de role:", { role, roleError });
+
         if (!role) {
+          console.log("[DEBUG] Role de colaborador não encontrado");
           await supabase.auth.signOut();
           clearLocalAuthState();
           throw new Error("Esta conta não possui acesso de colaborador.");
@@ -70,9 +85,11 @@ export default function AdminAuth() {
 
       navigate("/admin");
     } catch (error: unknown) {
+      console.log("[DEBUG] Erro no login:", error);
+      const translatedError = translateError(error);
       toast({
-        title: "Erro",
-        description: error instanceof Error ? error.message : "Credenciais inválidas. Tente novamente.",
+        title: "Erro no login",
+        description: translatedError,
         variant: "destructive",
       });
     } finally {
@@ -104,10 +121,11 @@ export default function AdminAuth() {
         title: "Email enviado!",
         description: "Se este email estiver cadastrado, você receberá um link de recuperação.",
       });
-    } catch {
+    } catch (error: unknown) {
+      const translatedError = translateError(error);
       toast({
-        title: "Erro",
-        description: "Ocorreu um erro. Tente novamente.",
+        title: "Erro ao enviar email",
+        description: translatedError,
         variant: "destructive",
       });
     } finally {

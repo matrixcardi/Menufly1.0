@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PhoneInput } from "@/components/ui/phone-input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
@@ -335,17 +336,6 @@ export function ManualOrderDrawer({ open, onOpenChange, restaurantId }: ManualOr
     }
   }, [open]);
 
-  const formatPhone = (value: string) => {
-    const numbers = value.replace(/\D/g, "");
-    if (numbers.length <= 2) return numbers;
-    if (numbers.length <= 7) return `(${numbers.slice(0, 2)}) ${numbers.slice(2)}`;
-    return `(${numbers.slice(0, 2)}) ${numbers.slice(2, 7)}-${numbers.slice(7, 11)}`;
-  };
-
-  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setCustomerPhone(formatPhone(e.target.value));
-  };
-
   const handleProductClick = (product: Product) => {
     setPickerProduct(product);
   };
@@ -511,12 +501,11 @@ export function ManualOrderDrawer({ open, onOpenChange, restaurantId }: ManualOr
 
               <div className="space-y-2">
                 <Label htmlFor="phone">Telefone *</Label>
-                <Input
+                <PhoneInput
                   id="phone"
-                  placeholder="(00) 00000-0000"
+                  placeholder="(11) 9 9999-9999"
                   value={customerPhone}
-                  onChange={handlePhoneChange}
-                  maxLength={15}
+                  onChange={(value) => setCustomerPhone(value)}
                   className="h-12"
                 />
               </div>

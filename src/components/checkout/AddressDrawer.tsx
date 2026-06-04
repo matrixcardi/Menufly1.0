@@ -6,6 +6,7 @@ import { haversineDistanceKm } from "@/lib/haversine";
 import { geocodeCep, reverseGeocode } from "@/lib/geocoding";
 import { format, addDays, parse, startOfDay, endOfDay } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { useCart } from "@/contexts/CartContext";
 import {
   Drawer,
   DrawerContent,
@@ -54,6 +55,7 @@ const addressSchema = z.object({
 });
 
 export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restaurantId, restaurantSlug }: AddressDrawerProps) {
+  const { subtotal, hasFreeShipping } = useCart();
   const [deliveryMethod, setDeliveryMethod] = useState<DeliveryMethod>(null);
   const [restaurantData, setRestaurantData] = useState<{
     name: string;
@@ -63,6 +65,7 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
     address_city: string | null;
     address_state: string | null;
     address_complement: string | null;
+    address_cep: string | null;
     address: string | null;
     opening_time: string | null;
     closing_time: string | null;
@@ -71,12 +74,16 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
     restaurant_lat: number | null;
     restaurant_lng: number | null;
     pickup_available: boolean | null;
+    delivery_available: boolean | null;
+    min_order: number | null;
+    free_shipping_threshold: number | null;
   } | null>(null);
 
   // Delivery zones from DB
   const [zones, setZones] = useState<DeliveryZone[]>([]);
   const [selectedCity, setSelectedCity] = useState("");
   const [selectedZoneId, setSelectedZoneId] = useState("");
+  const [loadingRestaurant, setLoadingRestaurant] = useState(false);
 
   // Radius mode state
   const [geoLoading, setGeoLoading] = useState(false);
@@ -92,6 +99,9 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
   const [resolvingAddress, setResolvingAddress] = useState(false);
   const [resolvedCity, setResolvedCity] = useState<string>("");
   const [resolvedState, setResolvedState] = useState<string>("");
+
+  // Neighborhood mode CEP state
+  const [neighborhoodCep, setNeighborhoodCep] = useState("");
 
   const [address, setAddress] = useState<AddressData>({
     street: "",
@@ -117,13 +127,23 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
   useEffect(() => {
     if (!restaurantId) return;
 
+    setLoadingRestaurant(true);
+
     supabase
       .from("restaurants")
-      .select("name, address_street, address_number, address_neighborhood, address_city, address_state, address_complement, address, opening_time, closing_time, delivery_mode, default_delivery_fee, restaurant_lat, restaurant_lng, pickup_available")
+      .select("name, address_street, address_number, address_neighborhood, address_city, address_state, address_complement, address_cep, address, opening_time, closing_time, delivery_mode, default_delivery_fee, restaurant_lat, restaurant_lng, pickup_available, delivery_available, min_order, free_shipping_threshold")
       .eq("id", restaurantId)
       .single()
-      .then(({ data }) => {
-        if (data) setRestaurantData(data as NonNullable<typeof restaurantData>);
+      .then(({ data, error }) => {
+        if (error) {
+          console.error("Error loading restaurant data:", error);
+        } else if (data) {
+          console.log("Restaurant data loaded:", data);
+          setRestaurantData(data as NonNullable<typeof restaurantData>);
+        }
+      })
+      .finally(() => {
+        setLoadingRestaurant(false);
       });
 
     supabase
@@ -156,16 +176,21 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
   const hasRadiusZones = radiusZones.length > 0;
   const hasBothModes = hasNeighborhoodZones && hasRadiusZones;
 
-  // Auto-select the only available mode; reset choice when zones change
+  // Auto-select the only available mode; reset choice when zones change or delivery is selected
   useEffect(() => {
+    if (deliveryMethod !== "delivery") {
+      setLocationMode(null);
+      return;
+    }
+
     if (hasBothModes) {
       // keep whatever user picked (or null until they pick)
       return;
     }
     if (hasRadiusZones) setLocationMode("radius");
     else if (hasNeighborhoodZones) setLocationMode("neighborhood");
-    else setLocationMode(null);
-  }, [hasBothModes, hasRadiusZones, hasNeighborhoodZones]);
+    else setLocationMode("none"); // No zones configured, allow delivery without zone selection
+  }, [hasBothModes, hasRadiusZones, hasNeighborhoodZones, deliveryMethod]);
 
   const isRadiusMode = locationMode === "radius";
 
@@ -218,6 +243,11 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
     const n = v.replace(/\D/g, "").slice(0, 8);
     if (n.length <= 5) return n;
     return `${n.slice(0, 5)}-${n.slice(5)}`;
+  };
+
+  // Neighborhood mode: apply CEP mask only — no auto-lookup
+  const handleNeighborhoodCepChange = (value: string) => {
+    setNeighborhoodCep(formatCep(value));
   };
 
   const lookupCep = async () => {
@@ -296,6 +326,9 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
   const isOutOfRange = isRadiusMode && distanceKm !== null && radiusZones.length > 0 && !matchedRadiusZone;
   const maxRadius = radiusZones.length > 0 ? Math.max(...radiusZones.map(z => z.max_radius_km || 0)) : null;
 
+  // Check if free shipping threshold is met
+  const freeShippingThresholdMet = restaurantData?.free_shipping_threshold && subtotal >= restaurantData.free_shipping_threshold;
+
   const handleInputChange = (field: keyof AddressData) => (e: React.ChangeEvent<HTMLInputElement>) => {
     setAddress((prev) => ({ ...prev, [field]: e.target.value }));
     setErrors((prev) => ({ ...prev, [field]: "" }));
@@ -312,6 +345,12 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
   };
 
   const handleSubmit = () => {
+    // Check minimum order for delivery
+    if (deliveryMethod === "delivery" && restaurantData?.min_order && subtotal < restaurantData.min_order) {
+      setErrors({ neighborhood: `Pedido mínimo para delivery: R$ ${restaurantData.min_order.toFixed(2)}` });
+      return;
+    }
+
     if (deliveryMethod === "delivery") {
       if (!locationMode) {
         setErrors({ neighborhood: "Selecione a forma de localização" });
@@ -352,14 +391,35 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
     onOpenChange(false);
   };
 
-  const isPickupValid = deliveryMethod === "pickup" && (!enableScheduling || (selectedDate && selectedSlot));
-  const isDeliveryValid = deliveryMethod === "delivery" && !!locationMode && (
-    isRadiusMode
-      ? (userLat !== null && userLng !== null && !isOutOfRange && address.number.trim().length >= 1 && address.street.trim().length >= 3)
-      : (address.street.length >= 3 && address.number.length >= 1 && !!selectedZoneId)
+  const isPickupValid = deliveryMethod === "pickup" && (restaurantData?.pickup_available !== false) && (!enableScheduling || (selectedDate && selectedSlot));
+  const isDeliveryValid = deliveryMethod === "delivery" && (restaurantData?.delivery_available !== false) && !!locationMode && (
+    locationMode === "none"
+      ? (address.street.length >= 3 && address.number.length >= 1)
+      : isRadiusMode
+        ? (userLat !== null && userLng !== null && !isOutOfRange && address.number.trim().length >= 1 && address.street.trim().length >= 3)
+        : (address.street.length >= 3 && address.number.length >= 1 && !!selectedZoneId && neighborhoodCep.replace(/\D/g, "").length === 8)
   ) && (!enableScheduling || (selectedDate && selectedSlot));
 
   const canProceed = isPickupValid || isDeliveryValid;
+
+  console.log("=== VALIDATION DEBUG ===");
+  console.log("deliveryMethod:", deliveryMethod);
+  console.log("pickup_available:", restaurantData?.pickup_available);
+  console.log("delivery_available:", restaurantData?.delivery_available);
+  console.log("enableScheduling:", enableScheduling);
+  console.log("selectedDate:", selectedDate);
+  console.log("selectedSlot:", selectedSlot);
+  console.log("locationMode:", locationMode);
+  console.log("isRadiusMode:", isRadiusMode);
+  console.log("userLat:", userLat);
+  console.log("userLng:", userLng);
+  console.log("isOutOfRange:", isOutOfRange);
+  console.log("address.street:", address.street);
+  console.log("address.number:", address.number);
+  console.log("selectedZoneId:", selectedZoneId);
+  console.log("isPickupValid:", isPickupValid);
+  console.log("isDeliveryValid:", isDeliveryValid);
+  console.log("canProceed:", canProceed);
   const hasDeliveryOption = hasRadiusZones || hasNeighborhoodZones;
 
   // Reset form only when drawer closes AND payment drawer is not opening
@@ -381,6 +441,7 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
       setResolvedCity("");
       setResolvedState("");
       setResolvingAddress(false);
+      setNeighborhoodCep("");
       setEnableScheduling(false);
       setSelectedDate(null);
       setSelectedSlot(null);
@@ -400,7 +461,13 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
   // Load available slots when date is selected
   useEffect(() => {
     async function loadSlots() {
+      console.log("=== LOAD SLOTS START ===");
+      console.log("selectedDate:", selectedDate);
+      console.log("restaurantId:", restaurantId);
+      console.log("schedulingConfig:", schedulingConfig);
+
       if (!selectedDate || !restaurantId || !schedulingConfig) {
+        console.log("Missing required data, returning empty slots");
         setAvailableSlots([]);
         return;
       }
@@ -410,6 +477,9 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
         const dayStart = startOfDay(selectedDate);
         const dayEnd = endOfDay(selectedDate);
 
+        console.log("dayStart:", dayStart.toISOString());
+        console.log("dayEnd:", dayEnd.toISOString());
+
         // Get blocked slots
         const { data: blockedData } = await supabase
           .from("scheduling_blocked_slots" as any)
@@ -417,6 +487,8 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
           .eq("restaurant_id", restaurantId)
           .gte("blocked_at", dayStart.toISOString())
           .lte("blocked_at", dayEnd.toISOString());
+
+        console.log("blockedData:", blockedData);
 
         const blockedTimes = new Set(
           (blockedData || []).map((b: any) => new Date(b.blocked_at).getTime())
@@ -431,6 +503,8 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
           .gte("scheduled_at", dayStart.toISOString())
           .lte("scheduled_at", dayEnd.toISOString());
 
+        console.log("ordersData:", ordersData);
+
         // Count orders per slot
         const slotCounts = new Map<number, number>();
         (ordersData || []).forEach((order: any) => {
@@ -440,18 +514,32 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
           }
         });
 
+        console.log("slotCounts:", slotCounts);
+
         // Generate slots based on config
-        const dayOfWeek = format(selectedDate, "EEEE", { locale: ptBR }).toLowerCase();
-        const dayKey = dayOfWeek === "segunda-feira" ? "monday" :
-                      dayOfWeek === "terça-feira" ? "tuesday" :
-                      dayOfWeek === "quarta-feira" ? "wednesday" :
-                      dayOfWeek === "quinta-feira" ? "thursday" :
-                      dayOfWeek === "sexta-feira" ? "friday" :
-                      dayOfWeek === "sábado" ? "saturday" : "sunday";
+        // Use America/Sao_Paulo timezone for day calculation
+        const dayOfWeekInBrasilia = selectedDate.toLocaleDateString('pt-BR', {
+          timeZone: 'America/Sao_Paulo',
+          weekday: 'long'
+        }).toLowerCase();
+        
+        const dayKey = dayOfWeekInBrasilia === "segunda-feira" ? "monday" :
+                      dayOfWeekInBrasilia === "terça-feira" ? "tuesday" :
+                      dayOfWeekInBrasilia === "quarta-feira" ? "wednesday" :
+                      dayOfWeekInBrasilia === "quinta-feira" ? "thursday" :
+                      dayOfWeekInBrasilia === "sexta-feira" ? "friday" :
+                      dayOfWeekInBrasilia === "sábado" ? "saturday" : "sunday";
+
+        console.log("dayOfWeek (pt-BR, America/Sao_Paulo):", dayOfWeekInBrasilia);
+        console.log("dayKey:", dayKey);
+        console.log("schedulingConfig.schedule:", schedulingConfig.schedule);
 
         const daySchedule = schedulingConfig.schedule?.[dayKey];
 
+        console.log("daySchedule:", daySchedule);
+
         if (!daySchedule || !daySchedule.enabled) {
+          console.log("Day schedule not found or not enabled");
           setAvailableSlots([]);
           setLoadingSlots(false);
           return;
@@ -461,6 +549,11 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
         const endTime = parse(daySchedule.end, "HH:mm", selectedDate);
         const intervalMinutes = schedulingConfig.slot_interval_minutes || 30;
         const maxOrders = schedulingConfig.max_orders_per_slot || 5;
+
+        console.log("startTime:", startTime);
+        console.log("endTime:", endTime);
+        console.log("intervalMinutes:", intervalMinutes);
+        console.log("maxOrders:", maxOrders);
 
         const slots: Array<{ start: Date; end: Date; available: number }> = [];
         let currentStart = startTime;
@@ -480,6 +573,8 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
           currentStart = currentEnd;
         }
 
+        console.log("Generated slots:", slots);
+        console.log("Slots count:", slots.length);
         setAvailableSlots(slots);
       } catch (error) {
         console.error("Error loading slots:", error);
@@ -493,13 +588,19 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
   }, [selectedDate, restaurantId, schedulingConfig]);
 
   // Build delivery fee and neighborhood for payment drawer
-  const currentDeliveryFee = isRadiusMode
-    ? radiusDeliveryFee
-    : (selectedZone?.fee || 0);
+  const currentDeliveryFee = (freeShippingThresholdMet || hasFreeShipping)
+    ? 0
+    : (locationMode === "none"
+      ? (restaurantData?.default_delivery_fee || 0)
+      : (isRadiusMode
+        ? radiusDeliveryFee
+        : (selectedZone?.fee || 0)));
 
-  const currentNeighborhood = isRadiusMode
-    ? (address.neighborhood || (matchedRadiusZone?.name || ""))
-    : (selectedZone?.name || "");
+  const currentNeighborhood = locationMode === "none"
+    ? (address.neighborhood || "")
+    : isRadiusMode
+      ? (address.neighborhood || (matchedRadiusZone?.name || ""))
+      : (selectedZone?.name || "");
 
   // Build human-readable address fields for the order/admin view. Never send raw
   // coordinates as the street; the customer must confirm a written street name.
@@ -546,7 +647,7 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
               
               <div className="space-y-2">
                 {/* Delivery Option */}
-                {hasDeliveryOption && (
+                {(restaurantData?.delivery_available !== false) && (
                   <button
                     onClick={() => setDeliveryMethod("delivery")}
                     className={`w-full flex items-center gap-4 p-4 rounded-lg border-2 transition-all ${
@@ -575,10 +676,10 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
                 )}
 
                 {/* Pickup Option */}
-                {restaurantData?.pickup_available && (
+                {(restaurantData?.pickup_available !== false) && (
                 <button
                   onClick={() => setDeliveryMethod("pickup")}
-                  className={`w-full flex items-center gap-4 p-4 rounded-lg border-2 transition-all ${
+                  className={`w-full flex items-start gap-4 p-4 rounded-lg border-2 transition-all ${
                     deliveryMethod === "pickup"
                       ? "border-primary bg-primary/5"
                       : "border-border hover:border-muted-foreground/50"
@@ -592,6 +693,23 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
                   <div className="flex-1 text-left">
                     <p className="font-medium">Retirar no balcão</p>
                     <p className="text-sm text-muted-foreground">Retire na loja</p>
+                    {deliveryMethod === "pickup" && (restaurantData?.address_street || restaurantData?.address) && (
+                      <div className="mt-3 pt-3 border-t border-border">
+                        <p className="text-xs text-muted-foreground flex items-start gap-1">
+                          <span className="mt-0.5">📍</span>
+                          <span>
+                            {restaurantData.address_street
+                              ? `${restaurantData.address_street}${restaurantData.address_number ? `, ${restaurantData.address_number}` : ""}${restaurantData.address_complement ? ` - ${restaurantData.address_complement}` : ""}${restaurantData.address_neighborhood ? `, ${restaurantData.address_neighborhood}` : ""}${restaurantData.address_city ? `, ${restaurantData.address_city}` : ""}${restaurantData.address_state ? ` - ${restaurantData.address_state}` : ""}${restaurantData.address_cep ? `, CEP ${restaurantData.address_cep}` : ""}`
+                              : restaurantData?.address || "Endereço não informado"}
+                          </span>
+                        </p>
+                        {restaurantData?.opening_time && restaurantData?.closing_time && (
+                          <p className="text-xs text-muted-foreground mt-1">
+                            ⏰ Horário: {restaurantData.opening_time} às {restaurantData.closing_time}
+                          </p>
+                        )}
+                      </div>
+                    )}
                   </div>
                   <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
                     deliveryMethod === "pickup" ? "border-primary" : "border-muted-foreground/50"
@@ -604,26 +722,6 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
                 )}
               </div>
             </div>
-
-            {/* Pickup Address Display */}
-            {deliveryMethod === "pickup" && (
-              <div className="bg-primary/5 border border-primary/20 rounded-lg p-4 space-y-2">
-                <div className="flex items-center gap-2">
-                  <Store className="w-5 h-5 text-primary" />
-                  <p className="font-semibold">{restaurantData?.name || "Restaurante"}</p>
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  {restaurantData?.address_street
-                    ? `${restaurantData.address_street}${restaurantData.address_number ? `, ${restaurantData.address_number}` : ""}${restaurantData.address_complement ? ` - ${restaurantData.address_complement}` : ""}${restaurantData.address_neighborhood ? `, ${restaurantData.address_neighborhood}` : ""}${restaurantData.address_city ? `, ${restaurantData.address_city}` : ""}${restaurantData.address_state ? ` - ${restaurantData.address_state}` : ""}`
-                    : restaurantData?.address || "Endereço não cadastrado"}
-                </p>
-                {restaurantData?.opening_time && restaurantData?.closing_time && (
-                  <p className="text-xs text-muted-foreground">
-                    Horário: {restaurantData.opening_time} às {restaurantData.closing_time}
-                  </p>
-                )}
-              </div>
-            )}
 
             {/* Scheduling Toggle */}
             {deliveryMethod && isSchedulingEnabled && (
@@ -779,6 +877,74 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
                 {/* Hide form fields until a mode is chosen (only matters when both available) */}
                 {locationMode && (
                   <>
+                {/* ─── No Zones Mode: Simple address form ─────────────── */}
+                {locationMode === "none" && (
+                  <>
+                    <div className="space-y-2">
+                      <Label htmlFor="street" className="text-sm font-medium">Rua / Avenida *</Label>
+                      <Input
+                        id="street"
+                        type="text"
+                        placeholder="Nome da rua"
+                        value={address.street}
+                        onChange={handleInputChange("street")}
+                        className={`h-12 text-base ${errors.street ? "border-destructive" : ""}`}
+                      />
+                      {errors.street && <p className="text-xs text-destructive">{errors.street}</p>}
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-2">
+                        <Label htmlFor="number" className="text-sm font-medium">Número *</Label>
+                        <Input
+                          id="number"
+                          type="text"
+                          placeholder="Nº"
+                          value={address.number}
+                          onChange={handleInputChange("number")}
+                          className={`h-12 text-base ${errors.number ? "border-destructive" : ""}`}
+                        />
+                        {errors.number && <p className="text-xs text-destructive">{errors.number}</p>}
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="complement" className="text-sm font-medium">Complemento</Label>
+                        <Input
+                          id="complement"
+                          type="text"
+                          placeholder="Apto, bloco..."
+                          value={address.complement}
+                          onChange={handleInputChange("complement")}
+                          className="h-12 text-base"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="neighborhood" className="text-sm font-medium">Bairro</Label>
+                      <Input
+                        id="neighborhood"
+                        type="text"
+                        placeholder="Bairro"
+                        value={address.neighborhood}
+                        onChange={handleInputChange("neighborhood")}
+                        className="h-12 text-base"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="reference" className="text-sm font-medium">Ponto de referência</Label>
+                      <Input
+                        id="reference"
+                        type="text"
+                        placeholder="Próximo a..."
+                        value={address.reference}
+                        onChange={handleInputChange("reference")}
+                        className="h-12 text-base"
+                      />
+                    </div>
+                  </>
+                )}
+
                 {/* ─── Radius Mode: GPS ─────────────── */}
                 {isRadiusMode && (
                   <>
@@ -949,6 +1115,21 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
                 {/* ─── Zones Mode: City + Neighborhood selects ─── */}
                 {!isRadiusMode && (
                   <>
+                    {/* CEP Field — first and triggers auto-fill */}
+                    <div className="space-y-2">
+                      <Label htmlFor="neighborhood-cep" className="text-sm font-medium">CEP *</Label>
+                      <Input
+                        id="neighborhood-cep"
+                        type="text"
+                        inputMode="numeric"
+                        placeholder="00000-000"
+                        value={neighborhoodCep}
+                        onChange={(e) => handleNeighborhoodCepChange(e.target.value)}
+                        maxLength={9}
+                        className="h-12 text-base"
+                      />
+                    </div>
+
                     {hasMultipleCities && (
                       <div className="space-y-2">
                         <Label className="text-sm font-medium">Cidade *</Label>
@@ -1093,11 +1274,12 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
         address={
           deliveryMethod === "delivery"
             ? {
-                street: isRadiusMode ? radiusStreetForOrder : address.street,
+                street: locationMode === "none" ? address.street : (isRadiusMode ? radiusStreetForOrder : address.street),
                 number: address.number,
-                neighborhood: isRadiusMode ? radiusNeighborhoodForOrder : currentNeighborhood,
+                neighborhood: locationMode === "none" ? (address.neighborhood || "") : (isRadiusMode ? radiusNeighborhoodForOrder : currentNeighborhood),
                 complement: address.complement || undefined,
                 reference: address.reference || undefined,
+                cep: isRadiusMode ? cep : neighborhoodCep || undefined,
               }
             : undefined
         }

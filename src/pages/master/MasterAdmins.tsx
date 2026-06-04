@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { UserPlus, Loader2, Eye, EyeOff } from "lucide-react";
+import { translateError } from "@/lib/error-messages";
 
 export default function MasterAdmins() {
   const { toast } = useToast();
@@ -51,7 +52,12 @@ export default function MasterAdmins() {
       setPassword("");
       setFullName("");
     } catch (error: any) {
-      toast({ title: "Erro", description: error.message, variant: "destructive" });
+      const translatedError = translateError(error);
+      toast({ 
+        title: "Erro ao criar administrador", 
+        description: translatedError, 
+        variant: "destructive" 
+      });
     } finally {
       setLoading(false);
     }

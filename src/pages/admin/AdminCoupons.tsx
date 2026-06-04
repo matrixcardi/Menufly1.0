@@ -6,6 +6,7 @@ import { PromoKitsSection } from "@/components/admin/PromoKitsSection";
 import { AutoPromosSection } from "@/components/admin/AutoPromosSection";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { CurrencyInput } from "@/components/ui/currency-input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -324,32 +325,44 @@ export default function AdminCoupons() {
                   <Label>
                     Valor {couponForm.discount_type === "percentage" ? "(%)" : "(R$)"}
                   </Label>
-                  <Input
-                    type="number"
-                    value={couponForm.discount_value}
-                    onChange={(e) =>
-                      setCouponForm({
-                        ...couponForm,
-                        discount_value: e.target.value,
-                      })
-                    }
-                    placeholder="0"
-                  />
+                  {couponForm.discount_type === "fixed" ? (
+                    <CurrencyInput
+                      value={typeof couponForm.discount_value === 'string' ? parseFloat(couponForm.discount_value) || 0 : couponForm.discount_value}
+                      onChange={(value) =>
+                        setCouponForm({
+                          ...couponForm,
+                          discount_value: value,
+                        })
+                      }
+                      placeholder="0,00"
+                    />
+                  ) : (
+                    <Input
+                      type="number"
+                      value={couponForm.discount_value}
+                      onChange={(e) =>
+                        setCouponForm({
+                          ...couponForm,
+                          discount_value: e.target.value,
+                        })
+                      }
+                      placeholder="0"
+                    />
+                  )}
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Pedido mínimo (R$)</Label>
-                  <Input
-                    type="number"
-                    value={couponForm.min_order}
-                    onChange={(e) =>
+                  <CurrencyInput
+                    value={typeof couponForm.min_order === 'string' ? parseFloat(couponForm.min_order) || 0 : couponForm.min_order}
+                    onChange={(value) =>
                       setCouponForm({
                         ...couponForm,
-                        min_order: e.target.value,
+                        min_order: value,
                       })
                     }
-                    placeholder="0"
+                    placeholder="0,00"
                   />
                 </div>
                 <div className="space-y-2">

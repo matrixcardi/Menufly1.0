@@ -7,6 +7,7 @@ import { BrowserRouter, Routes, Route, useNavigate, useLocation } from "react-ro
 import { CartProvider } from "@/contexts/CartContext";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { ForceTheme } from "@/components/ForceTheme";
+import { PDVKioskProvider } from "@/contexts/PDVKioskContext";
 // Eager: super lightweight, used on hot paths
 import MenuPage from "./pages/MenuPage";
 import NotFound from "./pages/NotFound";
@@ -61,6 +62,9 @@ const AdminIntegrations = lazy(() => import("./pages/admin/AdminIntegrations"));
 const AdminSubscription = lazy(() => import("./pages/admin/AdminSubscription"));
 const AdminAgendamento = lazy(() => import("./pages/admin/AdminAgendamento"));
 const AdminAgendaDia = lazy(() => import("./pages/admin/AdminAgendaDia"));
+const AdminPDV = lazy(() => import("./pages/admin/AdminPDV"));
+const AdminPDVMesas = lazy(() => import("./pages/admin/AdminPDVMesas"));
+const AdminSalao = lazy(() => import("./pages/admin/AdminSalao"));
 
 const queryClient = new QueryClient();
 
@@ -90,87 +94,92 @@ const PasswordResetHandler = ({ children }: { children: React.ReactNode }) => {
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false}>
-      <CartProvider>
-        <TooltipProvider>
-          <Toaster />
-          <Sonner />
-        <BrowserRouter>
-          <Suspense fallback={null}>
-          <PasswordResetHandler>
-          <Routes>
-            {/* Landing Page */}
-            <Route path="/" element={<ForceTheme theme="light"><LandingPage /></ForceTheme>} />
-            
-            {/* Customer Menu - Legacy route with query param */}
-            <Route path="/menu" element={<Index />} />
-            
-            {/* Checkout */}
-            <Route path="/checkout" element={<ForceTheme theme="light"><Checkout /></ForceTheme>} />
-            <Route path="/checkout/sucesso" element={<ForceTheme theme="light"><CheckoutSuccess /></ForceTheme>} />
-            <Route path="/checkout/cancelado" element={<ForceTheme theme="light"><CheckoutCanceled /></ForceTheme>} />
-            <Route path="/criar-conta" element={<CreateAccount />} />
-            <Route path="/pedido" element={<OrderConfirmation />} />
-            <Route path="/unsubscribe" element={<Unsubscribe />} />
-            <Route path="/ajuda" element={<ForceTheme theme="light"><HelpCenter /></ForceTheme>} />
-            
-            {/* Admin Panel */}
-            <Route path="/admin/auth" element={<AdminAuth />} />
-            <Route path="/admin/reset-password" element={<AdminResetPassword />} />
-            <Route path="/admin" element={<AdminLayout />}>
-              <Route index element={<AdminHome />} />
-              <Route path="home" element={<AdminHome />} />
-              <Route path="cardapio" element={<AdminMenu />} />
-              <Route path="pedidos" element={<AdminOrders />} />
-              <Route path="produtos" element={<AdminDashboard />} />
-              <Route path="promos" element={<AdminCoupons />} />
-              <Route path="cupons" element={<AdminCoupons />} /> {/* backward compat */}
-              <Route path="estoque" element={<AdminEstoque />} />
-              <Route path="fornecedores" element={<AdminFornecedores />} />
-              <Route path="lista-compras" element={<AdminListaCompras />} />
-              <Route path="agenda-dia" element={<AdminAgendaDia />} />
-              <Route path="entrega" element={<AdminDelivery />} />
-              <Route path="ads" element={<AdminAds />} />
-              <Route path="relatorios" element={<AdminReports />} />
-              <Route path="negocio" element={<AdminBusiness />} />
-              <Route path="pagamentos" element={<AdminPayments />} />
-              <Route path="crm" element={<AdminCRM />} />
-              <Route path="impressora" element={<AdminPrinter />} />
-              <Route path="campanhas" element={<AdminCampaigns />} />
-              <Route path="ia" element={<AdminAI />} />
-              <Route path="cmv" element={<AdminCMV />} />
-              <Route path="bi-financeiro" element={<AdminBIVisaoGeral />} />
-              <Route path="dre" element={<AdminDRE />} />
-              <Route path="custos-insumos" element={<AdminCustosInsumos />} />
-              <Route path="extrato-pedidos" element={<AdminExtratoPedidos />} />
-              <Route path="entregadores" element={<AdminDrivers />} />
-              <Route path="colaboradores" element={<AdminCollaborators />} />
-              <Route path="whatsapp-bot" element={<AdminWhatsAppBot />} />
-              <Route path="integracoes" element={<AdminIntegrations />} />
-              <Route path="assinatura" element={<AdminSubscription />} />
-              <Route path="agendamento" element={<AdminAgendamento />} />
-            </Route>
-            
-            {/* Master Panel */}
-            <Route path="/master/auth" element={<MasterAuth />} />
-            <Route path="/master" element={<ForceTheme theme="light"><MasterLayout /></ForceTheme>}>
-              <Route index element={<MasterDashboard />} />
-              <Route path="restaurantes" element={<MasterRestaurants />} />
-              <Route path="contas" element={<MasterAccounts />} />
-              <Route path="relatorios" element={<MasterReports />} />
-              <Route path="admins" element={<MasterAdmins />} />
-              <Route path="crm/:restaurantId" element={<MasterRestaurantCRM />} />
-            </Route>
-            
-            {/* Customer Menu - Slug-based route (MUST be last to avoid conflicts) */}
-            <Route path="/:slug" element={<MenuPage />} />
-            
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-          </PasswordResetHandler>
-          </Suspense>
-          </BrowserRouter>
-        </TooltipProvider>
-      </CartProvider>
+      <PDVKioskProvider>
+        <CartProvider>
+          <TooltipProvider>
+            <Toaster />
+            <Sonner />
+          <BrowserRouter>
+            <Suspense fallback={null}>
+            <PasswordResetHandler>
+            <Routes>
+              {/* Landing Page */}
+              <Route path="/" element={<ForceTheme theme="light"><LandingPage /></ForceTheme>} />
+              
+              {/* Customer Menu - Legacy route with query param */}
+              <Route path="/menu" element={<Index />} />
+              
+              {/* Checkout */}
+              <Route path="/checkout" element={<ForceTheme theme="light"><Checkout /></ForceTheme>} />
+              <Route path="/checkout/sucesso" element={<ForceTheme theme="light"><CheckoutSuccess /></ForceTheme>} />
+              <Route path="/checkout/cancelado" element={<ForceTheme theme="light"><CheckoutCanceled /></ForceTheme>} />
+              <Route path="/criar-conta" element={<CreateAccount />} />
+              <Route path="/pedido" element={<OrderConfirmation />} />
+              <Route path="/unsubscribe" element={<Unsubscribe />} />
+              <Route path="/ajuda" element={<ForceTheme theme="light"><HelpCenter /></ForceTheme>} />
+              
+              {/* Admin Panel */}
+              <Route path="/admin/auth" element={<AdminAuth />} />
+              <Route path="/admin/reset-password" element={<AdminResetPassword />} />
+              <Route path="/admin" element={<AdminLayout />}>
+                <Route index element={<AdminHome />} />
+                <Route path="home" element={<AdminHome />} />
+                <Route path="salao" element={<AdminSalao />} />
+                <Route path="pdv" element={<AdminSalao />} />
+                <Route path="pdv-mesas" element={<AdminSalao />} />
+                <Route path="cardapio" element={<AdminMenu />} />
+                <Route path="pedidos" element={<AdminOrders />} />
+                <Route path="produtos" element={<AdminDashboard />} />
+                <Route path="promos" element={<AdminCoupons />} />
+                <Route path="cupons" element={<AdminCoupons />} /> {/* backward compat */}
+                <Route path="estoque" element={<AdminEstoque />} />
+                <Route path="fornecedores" element={<AdminFornecedores />} />
+                <Route path="lista-compras" element={<AdminListaCompras />} />
+                <Route path="agenda-dia" element={<AdminAgendaDia />} />
+                <Route path="entrega" element={<AdminDelivery />} />
+                <Route path="ads" element={<AdminAds />} />
+                <Route path="relatorios" element={<AdminReports />} />
+                <Route path="negocio" element={<AdminBusiness />} />
+                <Route path="pagamentos" element={<AdminPayments />} />
+                <Route path="crm" element={<AdminCRM />} />
+                <Route path="impressora" element={<AdminPrinter />} />
+                <Route path="campanhas" element={<AdminCampaigns />} />
+                <Route path="ia" element={<AdminAI />} />
+                <Route path="cmv" element={<AdminCMV />} />
+                <Route path="bi-financeiro" element={<AdminBIVisaoGeral />} />
+                <Route path="dre" element={<AdminDRE />} />
+                <Route path="custos-insumos" element={<AdminCustosInsumos />} />
+                <Route path="extrato-pedidos" element={<AdminExtratoPedidos />} />
+                <Route path="entregadores" element={<AdminDrivers />} />
+                <Route path="colaboradores" element={<AdminCollaborators />} />
+                <Route path="whatsapp-bot" element={<AdminWhatsAppBot />} />
+                <Route path="integracoes" element={<AdminIntegrations />} />
+                <Route path="assinatura" element={<AdminSubscription />} />
+                <Route path="agendamento" element={<AdminAgendamento />} />
+              </Route>
+              
+              {/* Master Panel */}
+              <Route path="/master/auth" element={<MasterAuth />} />
+              <Route path="/master" element={<ForceTheme theme="light"><MasterLayout /></ForceTheme>}>
+                <Route index element={<MasterDashboard />} />
+                <Route path="restaurantes" element={<MasterRestaurants />} />
+                <Route path="contas" element={<MasterAccounts />} />
+                <Route path="relatorios" element={<MasterReports />} />
+                <Route path="admins" element={<MasterAdmins />} />
+                <Route path="crm/:restaurantId" element={<MasterRestaurantCRM />} />
+              </Route>
+              
+              {/* Customer Menu - Slug-based route (MUST be last to avoid conflicts) */}
+              <Route path="/:slug" element={<MenuPage />} />
+              
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+            </PasswordResetHandler>
+            </Suspense>
+            </BrowserRouter>
+          </TooltipProvider>
+        </CartProvider>
+      </PDVKioskProvider>
     </ThemeProvider>
   </QueryClientProvider>
 );

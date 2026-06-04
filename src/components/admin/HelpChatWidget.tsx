@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
+import { useLocation } from "react-router-dom";
 import { MessageCircleQuestion, X, Send, ArrowLeft, ExternalLink, Headset } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -150,6 +151,7 @@ async function streamChat({
 }
 
 export function HelpChatWidget() {
+  const location = useLocation();
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
@@ -158,6 +160,11 @@ export function HelpChatWidget() {
   const [view, setView] = useState<"faq" | "chat">("faq");
   const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Hide widget on /admin/salao route
+  if (location.pathname === "/admin/salao") {
+    return null;
+  }
 
   useEffect(() => {
     if (scrollRef.current) {

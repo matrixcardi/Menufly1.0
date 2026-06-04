@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { CurrencyInput } from "@/components/ui/currency-input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
@@ -35,6 +36,7 @@ import {
   Percent,
   Gift,
 } from "lucide-react";
+import { translateError } from "@/lib/error-messages";
 
 interface AutoPromo {
   id: string;
@@ -206,7 +208,10 @@ export function AutoPromosSection({ restaurantId }: AutoPromosSectionProps) {
 
     setSaving(false);
     if (error) {
-      toast.error("Erro ao salvar: " + error.message);
+      const translatedError = translateError(error);
+      toast.error("Erro ao salvar", {
+        description: translatedError,
+      });
       return;
     }
     toast.success(editingId ? "Promo atualizada!" : "Promo criada!");
@@ -218,7 +223,10 @@ export function AutoPromosSection({ restaurantId }: AutoPromosSectionProps) {
     if (!confirm("Excluir esta promo automática?")) return;
     const { error } = await supabase.from("auto_promos").delete().eq("id", id);
     if (error) {
-      toast.error("Erro ao excluir");
+      const translatedError = translateError(error);
+      toast.error("Erro ao excluir", {
+        description: translatedError,
+      });
       return;
     }
     toast.success("Excluída!");
@@ -414,12 +422,19 @@ export function AutoPromosSection({ restaurantId }: AutoPromosSectionProps) {
                   <Label>
                     {form.trigger_type === "min_value" ? "Valor mínimo (R$)" : "Quantidade mínima"}
                   </Label>
-                  <Input
-                    type="number"
-                    min={1}
-                    value={form.trigger_value}
-                    onChange={(e) => setForm({ ...form, trigger_value: Number(e.target.value) })}
-                  />
+                  {form.trigger_type === "min_value" ? (
+                    <CurrencyInput
+                      value={typeof form.trigger_value === 'string' ? parseFloat(form.trigger_value) || 0 : form.trigger_value}
+                      onChange={(value) => setForm({ ...form, trigger_value: value })}
+                    />
+                  ) : (
+                    <Input
+                      type="number"
+                      min={1}
+                      value={form.trigger_value}
+                      onChange={(e) => setForm({ ...form, trigger_value: Number(e.target.value) })}
+                    />
+                  )}
                 </div>
               )}
 
@@ -502,12 +517,9 @@ export function AutoPromosSection({ restaurantId }: AutoPromosSectionProps) {
               {form.benefit_type === "fixed_discount" && (
                 <div>
                   <Label>Valor do desconto (R$)</Label>
-                  <Input
-                    type="number"
-                    min={0.01}
-                    step={0.01}
-                    value={form.benefit_value}
-                    onChange={(e) => setForm({ ...form, benefit_value: Number(e.target.value) })}
+                  <CurrencyInput
+                    value={typeof form.benefit_value === 'string' ? parseFloat(form.benefit_value) || 0 : form.benefit_value}
+                    onChange={(value) => setForm({ ...form, benefit_value: value })}
                   />
                 </div>
               )}

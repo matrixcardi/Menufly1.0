@@ -9,6 +9,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Calendar as CalendarComponent } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { supabase } from "@/integrations/supabase/client";
 import { useRestaurantContext } from "@/contexts/RestaurantContext";
 import { useToast } from "@/hooks/use-toast";
@@ -72,6 +74,7 @@ export default function AdminAgendaDia() {
   const [slots, setSlots] = useState<Slot[]>([]);
   const [blockedSlots, setBlockedSlots] = useState<BlockedSlot[]>([]);
   const [summary, setSummary] = useState({ total: 0, delivery: 0, pickup: 0 });
+  const [calendarOpen, setCalendarOpen] = useState(false);
 
   // Block slot dialog
   const [blockDialogOpen, setBlockDialogOpen] = useState(false);
@@ -307,9 +310,27 @@ export default function AdminAgendaDia() {
           <Button variant="outline" size="icon" onClick={() => setSelectedDate(subDays(selectedDate, 1))}>
             <ChevronLeft className="w-4 h-4" />
           </Button>
-          <Button variant="outline" onClick={() => setSelectedDate(new Date())}>
-            {isToday ? "Hoje" : format(selectedDate, "dd/MM/yyyy", { locale: ptBR })}
-          </Button>
+          <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
+            <PopoverTrigger asChild>
+              <Button variant="outline">
+                {isToday ? "Hoje" : format(selectedDate, "dd/MM/yyyy", { locale: ptBR })}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="center">
+              <CalendarComponent
+                mode="single"
+                selected={selectedDate}
+                onSelect={(date) => {
+                  if (date) {
+                    setSelectedDate(date);
+                    setCalendarOpen(false);
+                  }
+                }}
+                initialFocus
+                locale={ptBR}
+              />
+            </PopoverContent>
+          </Popover>
           <Button variant="outline" size="icon" onClick={() => setSelectedDate(addDays(selectedDate, 1))}>
             <ChevronRight className="w-4 h-4" />
           </Button>

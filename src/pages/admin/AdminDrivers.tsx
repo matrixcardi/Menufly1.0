@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PhoneInput } from "@/components/ui/phone-input";
+import { CurrencyInput } from "@/components/ui/currency-input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -99,11 +101,13 @@ export default function AdminDrivers() {
       toast({ title: "Preencha nome e telefone", variant: "destructive" });
       return;
     }
+    
     // Normalize phone: keep only digits, strip leading country code (55) if present.
     const rawDigits = form.phone.replace(/\D/g, "");
     const localDigits = rawDigits.startsWith("55") && rawDigits.length > 11
       ? rawDigits.slice(2)
       : rawDigits;
+    
     if (localDigits.length < 10 || localDigits.length > 11) {
       toast({
         title: "Telefone inválido",
@@ -112,7 +116,9 @@ export default function AdminDrivers() {
       });
       return;
     }
+    
     setSaving(true);
+    
     const fixedFee = parseFloat(form.fixed_fee.replace(",", ".")) || 0;
     const perRideFee = parseFloat(form.per_ride_fee.replace(",", ".")) || 0;
 
@@ -124,30 +130,40 @@ export default function AdminDrivers() {
       fee_mode: form.fee_mode,
     };
 
-    if (editingDriver) {
-      const { error } = await supabase
-        .from("drivers")
-        .update(payload)
-        .eq("id", editingDriver.id);
-      if (error) {
-        toast({ title: "Erro ao salvar", description: error.message, variant: "destructive" });
+    try {
+      if (editingDriver) {
+        const { error } = await supabase
+          .from("drivers")
+          .update(payload)
+          .eq("id", editingDriver.id);
+        
+        if (error) {
+          toast({ title: "Erro ao salvar", description: error.message, variant: "destructive" });
+        } else {
+          toast({ title: "✅ Entregador atualizado!" });
+        }
       } else {
-        toast({ title: "✅ Entregador atualizado!" });
+        const { error } = await supabase
+          .from("drivers")
+          .insert({ restaurant_id: restaurantId, ...payload });
+        
+        if (error) {
+          toast({ title: "Erro ao criar", description: error.message, variant: "destructive" });
+        } else {
+          toast({ title: "✅ Entregador adicionado!" });
+        }
       }
-    } else {
-      const { error } = await supabase
-        .from("drivers")
-        .insert({ restaurant_id: restaurantId, ...payload });
-      if (error) {
-        toast({ title: "Erro ao criar", description: error.message, variant: "destructive" });
-      } else {
-        toast({ title: "✅ Entregador adicionado!" });
-      }
+    } catch (err) {
+      toast({ 
+        title: "Erro inesperado", 
+        description: err instanceof Error ? err.message : "Ocorreu um erro ao salvar", 
+        variant: "destructive" 
+      });
+    } finally {
+      setSaving(false);
+      setShowDialog(false);
+      fetchDrivers(restaurantId);
     }
-
-    setSaving(false);
-    setShowDialog(false);
-    fetchDrivers(restaurantId);
   };
 
   const handleToggleActive = async (d: Driver) => {
@@ -332,7 +348,7 @@ export default function AdminDrivers() {
             </div>
             <div>
               <Label>Telefone (WhatsApp)</Label>
-              <Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="(00) 00000-0000" />
+              <PhoneInput value={form.phone} onChange={(value) => setForm({ ...form, phone: value })} placeholder="(11) 9 9999-9999" />
             </div>
             <div>
               <Label>Taxa fixa de arrancada (R$)</Label>
@@ -388,14 +404,9 @@ export default function AdminDrivers() {
             {form.fee_mode === "fixed_per_ride" && (
               <div>
                 <Label>Valor fixo por corrida (R$)</Label>
-                <Input
-                  type="text"
-                  inputMode="decimal"
-                  value={form.per_ride_fee}
-                  onChange={(e) => {
-                    const val = e.target.value.replace(/[^0-9.,]/g, "");
-                    setForm({ ...form, per_ride_fee: val });
-                  }}
+                <CurrencyInput
+                  value={typeof form.per_ride_fee === 'string' ? parseFloat(form.per_ride_fee) || 0 : form.per_ride_fee}
+                  onChange={(value) => setForm({ ...form, per_ride_fee: value })}
                   placeholder="Ex: 5,00"
                 />
                 <p className="text-xs text-muted-foreground mt-1">Valor adicional pago por cada pedido entregue</p>

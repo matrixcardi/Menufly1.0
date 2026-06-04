@@ -43,6 +43,7 @@ import {
 } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
+import { PhoneInput } from "@/components/ui/phone-input";
 import { Separator } from "@/components/ui/separator";
 import { supabase } from "@/integrations/supabase/client";
 import { differenceInDays, format } from "date-fns";
@@ -1097,12 +1098,11 @@ export default function AdminCRM() {
             </div>
             <div className="space-y-2">
               <Label htmlFor="new-customer-phone">Telefone</Label>
-              <Input
+              <PhoneInput
                 id="new-customer-phone"
-                placeholder="(99) 99999-9999"
+                placeholder="(11) 9 9999-9999"
                 value={newCustomerPhone}
-                onChange={(e) => setNewCustomerPhone(e.target.value)}
-                maxLength={15}
+                onChange={(value) => setNewCustomerPhone(value)}
               />
             </div>
           </div>
