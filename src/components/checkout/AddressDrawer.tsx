@@ -1259,7 +1259,7 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
               disabled={!canProceed}
               className="w-full h-12 text-base font-bold bg-primary hover:bg-primary/90 disabled:opacity-50"
             >
-              Continuar para pagamento
+            Continuar para pagamento
             </Button>
           </div>
         </DrawerContent>
