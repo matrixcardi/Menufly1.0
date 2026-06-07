@@ -297,6 +297,29 @@ export default function AdminIntegrations() {
         return;
       }
 
+      const is99food = selectedPlatform.id === "99food";
+      if (is99food) {
+        const { data, error } = await supabase.functions.invoke("nf-connect-merchant", {
+          body: { restaurant_id: restaurantId, merchant_id: merchantId.trim(), api_token: apiToken.trim() },
+        });
+        if (error) {
+          const msg = await extractEdgeFunctionMessage(error);
+          toast({ title: "Erro ao conectar 99food", description: msg, variant: "destructive" });
+          return;
+        }
+        toast({
+          title: `99food conectado! 🎉`,
+          description: data?.merchant_name
+            ? `Loja: ${data.merchant_name}. Pedidos serão sincronizados a cada 30 segundos.`
+            : "Pedidos serão sincronizados a cada 30 segundos.",
+        });
+        setSelectedPlatform(null);
+        setMerchantId("");
+        setApiToken("");
+        fetchData();
+        return;
+      }
+
       const existing = getIntegration(selectedPlatform.id);
 
       if (existing) {
@@ -947,11 +970,6 @@ export default function AdminIntegrations() {
                     </div>
                   </div>
                 )}
-                {selectedPlatform.id === "99food" && (
-                  <div className="rounded-lg bg-blue-500/5 border border-blue-500/20 p-3 text-xs text-blue-700 dark:text-blue-300">
-                    A integração com 99food está em fase de homologação. Em breve estará disponível para todos os restaurantes.
-                  </div>
-                )}
               </div>
             </div>
           )}
@@ -985,7 +1003,7 @@ export default function AdminIntegrations() {
               <Button variant="outline" onClick={() => setSelectedPlatform(null)}>
                 Cancelar
               </Button>
-              <Button onClick={handleConnect} disabled={saving || selectedPlatform?.id === "99food"}>
+              <Button onClick={handleConnect} disabled={saving}>
                 {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Plug className="w-4 h-4 mr-2" />}
                 {saving ? "Conectando..." : "Conectar"}
               </Button>

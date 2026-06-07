@@ -186,7 +186,7 @@ export default function AdminDelivery() {
       toast({ title: "Erro ao salvar modo", description: error.message, variant: "destructive" });
       setDeliveryMode(deliveryMode); // revert
     } else {
-      toast({ title: mode === "radius" ? "Modo raio ativado!" : "Modo bairros ativado!" });
+      toast({ title: mode === "radius" ? "Modo raio ativado!" : "Modo setores ativado!" });
       setRestaurant(prev => prev ? { ...prev, delivery_mode: mode } : prev);
     }
   }
@@ -382,6 +382,7 @@ export default function AdminDelivery() {
           min_radius_km: null,
           max_radius_km: null,
           estimated_time_min: zoneTime ? parseInt(zoneTime) : null,
+          is_active: editingZone.is_active,
         };
 
         console.log("Neighborhood zone data (edit):", zoneData);
@@ -406,6 +407,7 @@ export default function AdminDelivery() {
           min_radius_km: null,
           max_radius_km: null,
           estimated_time_min: zoneTime ? parseInt(zoneTime) : null,
+          is_active: true,
         }));
 
         console.log("Neighborhood zone rows to insert:", rows);
@@ -416,7 +418,7 @@ export default function AdminDelivery() {
         }
         else {
           console.log("Insert successful");
-          toast({ title: `${names.length} bairro(s) adicionado(s)!` });
+          toast({ title: `${names.length} ${names.length === 1 ? 'setor' : 'setores'} adicionado${names.length === 1 ? '' : 's'}!` });
         }
       }
     }
@@ -541,10 +543,10 @@ export default function AdminDelivery() {
                 <div className={`p-2 rounded-full ${deliveryMode === "zones" ? "bg-primary text-primary-foreground" : "bg-muted"}`}>
                   <MapPin className="w-5 h-5" />
                 </div>
-                <span className="font-semibold">Limitado por bairros</span>
+                <span className="font-semibold">Limitado por setores</span>
               </div>
               <p className="text-sm text-muted-foreground">
-                O cliente seleciona cidade e bairro entre os cadastrados. Taxa definida por zona.
+                O cliente seleciona cidade e setor entre os cadastrados. Taxa definida por zona.
               </p>
             </button>
 
@@ -761,21 +763,24 @@ export default function AdminDelivery() {
       )}
 
       {/* Create/Edit Dialog — shared */}
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      <Dialog open={dialogOpen} onOpenChange={(open) => {
+        console.log("Dialog onOpenChange", { open, dialogOpen });
+        setDialogOpen(open);
+      }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
               {editingZone
-                ? deliveryMode === "radius" ? "Editar Faixa" : "Editar Bairro"
-                : deliveryMode === "radius" ? "Nova Faixa de Raio" : "Adicionar Bairros"
+                ? deliveryMode === "radius" ? "Editar Faixa" : "Editar Setor"
+                : deliveryMode === "radius" ? "Nova Faixa de Raio" : "Adicionar Setores"
               }
             </DialogTitle>
             <DialogDescription>
               {deliveryMode === "radius"
                 ? "Defina a faixa de distância e o valor da taxa"
                 : editingZone
-                  ? "Edite as informações deste bairro"
-                  : "Adicione vários bairros de uma vez separando por vírgula"
+                  ? "Edite as informações deste setor"
+                  : "Adicione vários setores de uma vez separando por vírgula"
               }
             </DialogDescription>
           </DialogHeader>
@@ -810,22 +815,22 @@ export default function AdminDelivery() {
                 <div className="space-y-2">
                   <Label>Cidade</Label>
                   <Input placeholder="Ex: São Paulo, Campinas" value={zoneCity} onChange={(e) => setZoneCity(e.target.value)} />
-                  <p className="text-xs text-muted-foreground">Opcional — agrupar bairros por cidade</p>
+                  <p className="text-xs text-muted-foreground">Opcional — agrupar setores por cidade</p>
                 </div>
                 <div className="space-y-2">
-                  <Label>{editingZone ? "Nome do Bairro *" : "Bairros *"}</Label>
+                  <Label>{editingZone ? "Nome do Setor *" : "Setores *"}</Label>
                   {editingZone ? (
                     <Input placeholder="Ex: Centro" value={zoneName} onChange={(e) => setZoneName(e.target.value)} />
                   ) : (
                     <>
                       <textarea
                         className="flex min-h-[120px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                        placeholder={"Cole ou digite os bairros:\n\nCentro\nJardins\nVila Madalena\n\nOu separados por vírgula: Centro, Jardins"}
+                        placeholder={"Cole ou digite os setores:\n\nCentro\nJardins\nVila Madalena\n\nOu separados por vírgula: Centro, Jardins"}
                         value={zoneName}
                         onChange={(e) => setZoneName(e.target.value)}
                       />
                       {bulkCount > 0 && (
-                        <Badge variant="secondary" className="w-fit">{bulkCount} bairro(s) detectado(s)</Badge>
+                        <Badge variant="secondary" className="w-fit">{bulkCount} {bulkCount === 1 ? 'setor' : 'setores'} detectado{bulkCount === 1 ? '' : 's'}</Badge>
                       )}
                     </>
                   )}
@@ -841,6 +846,18 @@ export default function AdminDelivery() {
                   <Label>Tempo Estimado (minutos)</Label>
                   <Input type="number" placeholder="Ex: 30" value={zoneTime} onChange={(e) => setZoneTime(e.target.value)} />
                   <p className="text-xs text-muted-foreground">Opcional - deixe vazio para usar o tempo padrão</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Switch
+                    id="zone-active"
+                    checked={editingZone ? editingZone.is_active : true}
+                    onCheckedChange={(checked) => {
+                      if (editingZone) {
+                        setEditingZone({ ...editingZone, is_active: checked });
+                      }
+                    }}
+                  />
+                  <Label htmlFor="zone-active" className="text-sm">Setor ativo</Label>
                 </div>
               </>
             )}
@@ -1030,24 +1047,20 @@ function NeighborhoodZonesCard({
           Zonas de Entrega
         </CardTitle>
         <CardDescription>
-          Cadastre as cidades e bairros onde você entrega. Apenas clientes dessas localidades poderão fazer pedidos para entrega.
+          Cadastre as cidades e setores onde você entrega. Apenas clientes dessas localidades poderão fazer pedidos para entrega.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="flex items-center justify-between flex-wrap gap-2">
           <p className="text-sm text-muted-foreground">
-            Adicione as cidades e bairros atendidos com suas respectivas taxas.
+            Adicione as cidades e setores atendidos com suas respectivas taxas.
           </p>
-          <Button onClick={openAddDialog}>
-            <Plus className="w-4 h-4 mr-2" />
-            Adicionar Bairros
-          </Button>
         </div>
 
         {/* Bulk actions toolbar */}
         {selectedIds.size > 0 && (
           <div className="flex items-center gap-2 flex-wrap p-3 rounded-lg bg-primary/5 border border-primary/20">
-            <Badge variant="default">{selectedIds.size} selecionado(s)</Badge>
+            <Badge variant="default">{selectedIds.size} {selectedIds.size === 1 ? 'selecionado' : 'selecionados'}</Badge>
             <Dialog open={bulkEditOpen} onOpenChange={setBulkEditOpen}>
               <DialogTrigger asChild>
                 <Button size="sm" variant="outline" onClick={() => { setBulkFee(""); setBulkTime(""); }}>
@@ -1056,7 +1069,7 @@ function NeighborhoodZonesCard({
               </DialogTrigger>
               <DialogContent>
                 <DialogHeader>
-                  <DialogTitle>Editar {selectedIds.size} bairro(s)</DialogTitle>
+                  <DialogTitle>Editar {selectedIds.size} {selectedIds.size === 1 ? 'setor' : 'setores'}</DialogTitle>
                   <DialogDescription>Preencha apenas os campos que deseja alterar</DialogDescription>
                 </DialogHeader>
                 <div className="space-y-4 py-4">
@@ -1087,10 +1100,14 @@ function NeighborhoodZonesCard({
         )}
 
         {zones.length === 0 ? (
-          <div className="text-center py-12 text-muted-foreground">
-            <MapPin className="w-12 h-12 mx-auto mb-4 opacity-50" />
-            <p>Nenhum bairro cadastrado</p>
-            <p className="text-sm">Adicione bairros para configurar as taxas de entrega</p>
+          <div className="text-center py-12">
+            <MapPin className="w-12 h-12 mx-auto mb-4 opacity-50 text-muted-foreground" />
+            <p className="text-muted-foreground mb-4">Nenhum setor cadastrado</p>
+            <p className="text-sm text-muted-foreground mb-6">Adicione setores para configurar as taxas de entrega</p>
+            <Button onClick={openAddDialog}>
+              <Plus className="w-4 h-4 mr-2" />
+              Adicionar Setor
+            </Button>
           </div>
         ) : (
           <div className="space-y-6">
@@ -1120,9 +1137,38 @@ function NeighborhoodZonesCard({
                   ) : (
                     <>
                       <h3 className="font-semibold text-sm uppercase tracking-wide">{city}</h3>
-                      <Badge variant="outline" className="text-xs">{grouped[city].length} bairro(s)</Badge>
-                      <Button variant="ghost" size="sm" className="h-7 text-xs ml-auto" onClick={() => { setEditingCity(city); setNewCityName(city === "Sem cidade" ? "" : city); }}>
-                        <Pencil className="w-3.5 h-3.5 mr-1" />Editar Cidade
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 text-xs ml-auto"
+                        type="button"
+                        onClick={(e) => {
+                          console.log("Botão Adicionar Setor clicado", { city, dialogOpen });
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setZoneCity(city === "Sem cidade" ? "" : city);
+                          setZoneName("");
+                          setZoneFee("");
+                          setZoneTime("");
+                          setDialogOpen(true);
+                          console.log("setDialogOpen(true) chamado");
+                        }}
+                      >
+                        <Plus className="w-3.5 h-3.5 mr-1" />Adicionar Setor
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 text-xs"
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setEditingCity(city);
+                          setNewCityName(city === "Sem cidade" ? "" : city);
+                        }}
+                      >
+                        <Pencil className="w-3.5 h-3.5 mr-1" />
                       </Button>
                     </>
                   )}
@@ -1134,7 +1180,7 @@ function NeighborhoodZonesCard({
                     <TableHeader>
                       <TableRow>
                         <TableHead className="w-10"></TableHead>
-                        <TableHead>Bairro</TableHead>
+                        <TableHead>Setor</TableHead>
                         <TableHead>Taxa</TableHead>
                         <TableHead>Tempo</TableHead>
                         <TableHead>Ativo</TableHead>

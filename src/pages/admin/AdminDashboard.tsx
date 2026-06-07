@@ -579,15 +579,15 @@ export default function AdminDashboard() {
         </p>
       </div>
 
-      <Tabs defaultValue="products" className="space-y-6">
+      <Tabs defaultValue="categories" className="space-y-6">
         <TabsList className="grid w-full max-w-md grid-cols-3">
-          <TabsTrigger value="products" className="gap-2">
-            <Package className="w-4 h-4" />
-            Produtos
-          </TabsTrigger>
           <TabsTrigger value="categories" className="gap-2">
             <LayoutGrid className="w-4 h-4" />
             Categorias
+          </TabsTrigger>
+          <TabsTrigger value="products" className="gap-2">
+            <Package className="w-4 h-4" />
+            Produtos
           </TabsTrigger>
           <TabsTrigger value="addons" className="gap-2">
             <ListPlus className="w-4 h-4" />

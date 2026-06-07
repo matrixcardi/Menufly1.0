@@ -203,6 +203,8 @@ export default function BulkWhatsappSender({
   const { toast } = useToast();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
+  const [warningDialogOpen, setWarningDialogOpen] = useState(false);
+  const [riskAcknowledged, setRiskAcknowledged] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -332,7 +334,8 @@ export default function BulkWhatsappSender({
 
     const toSend = selectedCustomers.slice(0, remaining);
     setQueue(toSend);
-    setConfirmDialogOpen(true);
+    setRiskAcknowledged(false);
+    setWarningDialogOpen(true);
   };
 
   const confirmAndStart = () => {
@@ -470,6 +473,68 @@ export default function BulkWhatsappSender({
           Disparar WhatsApp
         </Button>
       </div>
+
+      {/* Risk Warning Dialog */}
+      <AlertDialog open={warningDialogOpen} onOpenChange={setWarningDialogOpen}>
+        <AlertDialogContent className="max-w-lg">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-yellow-600 dark:text-yellow-500">
+              <AlertTriangle className="h-6 w-6" />
+              ⚠️ Atenção antes de disparar
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-4 pt-2">
+                <div className="bg-yellow-50 dark:bg-yellow-950 border border-yellow-200 dark:border-yellow-800 p-4 rounded-lg space-y-3">
+                  <p className="text-sm text-yellow-800 dark:text-yellow-200">
+                    🚫 <strong>Risco de banimento:</strong> O WhatsApp possui sistemas automáticos de detecção de disparos em massa. Enviar mensagens para muitos contatos em sequência pode resultar no banimento temporário ou permanente do seu número, sem possibilidade de recuperação.
+                  </p>
+                  <p className="text-sm text-yellow-800 dark:text-yellow-200">
+                    📵 <strong>Denúncias de clientes:</strong> Se os destinatários marcarem sua mensagem como spam, o algoritmo do WhatsApp pode bloquear seu número automaticamente. Quanto mais denúncias, maior o risco.
+                  </p>
+                  <p className="text-sm text-yellow-800 dark:text-yellow-200">
+                    ⏱️ <strong>O intervalo não é garantia:</strong> O intervalo de 5 minutos entre mensagens reduz o risco, mas não elimina completamente a chance de detecção. O WhatsApp analisa padrões de comportamento ao longo do tempo.
+                  </p>
+                  <p className="text-sm text-yellow-800 dark:text-yellow-200">
+                    📋 <strong>Boas práticas obrigatórias:</strong> Envie apenas para clientes que realmente conhecem seu estabelecimento. Evite disparos repetidos para a mesma base em curtos períodos. Mensagens irrelevantes aumentam drasticamente o risco de denúncias.
+                  </p>
+                  <p className="text-sm text-yellow-800 dark:text-yellow-200">
+                    ⚠️ <strong>Responsabilidade:</strong> O uso desta funcionalidade é de total responsabilidade do usuário. A plataforma não se responsabiliza por banimentos ou bloqueios decorrentes do uso inadequado do disparo em massa.
+                  </p>
+                </div>
+
+                <div className="flex items-start gap-3">
+                  <input
+                    type="checkbox"
+                    id="risk-checkbox"
+                    checked={riskAcknowledged}
+                    onChange={(e) => setRiskAcknowledged(e.target.checked)}
+                    className="mt-1 rounded border-gray-300 text-primary focus:ring-primary"
+                  />
+                  <Label
+                    htmlFor="risk-checkbox"
+                    className="text-sm cursor-pointer leading-tight"
+                  >
+                    Estou ciente dos riscos e desejo continuar
+                  </Label>
+                </div>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="gap-2">
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setWarningDialogOpen(false);
+                setConfirmDialogOpen(true);
+              }}
+              disabled={!riskAcknowledged}
+              className={!riskAcknowledged ? "opacity-50 cursor-not-allowed" : ""}
+            >
+              Continuar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Confirmation Dialog */}
       <AlertDialog open={confirmDialogOpen} onOpenChange={setConfirmDialogOpen}>

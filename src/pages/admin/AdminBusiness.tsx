@@ -90,6 +90,8 @@ export default function AdminBusiness() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [loadingCep, setLoadingCep] = useState(false);
+  const [applyToAllStart, setApplyToAllStart] = useState('18:00');
+  const [applyToAllEnd, setApplyToAllEnd] = useState('23:00');
   const { toast } = useToast();
 
   useEffect(() => {
@@ -201,6 +203,56 @@ export default function AdminBusiness() {
         prev.map(h => h.id === id ? { ...h, toDelete: true } : h)
       );
     }
+  };
+
+  const applyToAllActiveDays = () => {
+    if (!restaurant) return;
+
+    const activeDays = DAYS_OF_WEEK.filter(day => isDayOpen(day.value));
+    
+    if (activeDays.length === 0) {
+      toast({
+        title: "Nenhum dia ativo",
+        description: "Ative pelo menos um dia para aplicar o horário.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Remove existing hours for active days
+    const toDelete = businessHours
+      .filter(h => activeDays.some(d => d.value === h.day_of_week) && !h.toDelete)
+      .map(h => h.id);
+
+    // Create new hours for active days
+    const newHours: BusinessHour[] = [];
+    activeDays.forEach(day => {
+      newHours.push({
+        id: `new-${Date.now()}-${day.value}`,
+        restaurant_id: restaurant.id,
+        day_of_week: day.value,
+        is_open: true,
+        opening_time: applyToAllStart,
+        closing_time: applyToAllEnd,
+        period_order: 0,
+        isNew: true,
+      });
+    });
+
+    // Mark existing hours for deletion
+    const updated = businessHours.map(h => {
+      if (toDelete.includes(h.id) && !h.isNew) {
+        return { ...h, toDelete: true };
+      }
+      return h;
+    });
+
+    setBusinessHours([...updated, ...newHours]);
+
+    toast({
+      title: "✅ Horário aplicado para todos os dias ativos",
+      description: `Aplicado para ${activeDays.length} dia(s). Não esqueça de clicar em Salvar.`,
+    });
   };
 
   const formatCep = (value: string) => {
@@ -975,6 +1027,37 @@ export default function AdminBusiness() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
+              {/* Apply to all */}
+              <div className="flex items-center gap-4 p-4 bg-muted/50 rounded-lg border">
+                <div className="flex items-center gap-2 text-sm font-medium">
+                  <Clock className="w-4 h-4 text-muted-foreground" />
+                  Aplicar horário para todos os dias ativos
+                </div>
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="time"
+                    value={applyToAllStart}
+                    onChange={(e) => setApplyToAllStart(e.target.value)}
+                    className="w-[120px]"
+                  />
+                  <span className="text-muted-foreground">às</span>
+                  <Input
+                    type="time"
+                    value={applyToAllEnd}
+                    onChange={(e) => setApplyToAllEnd(e.target.value)}
+                    className="w-[120px]"
+                  />
+                </div>
+                <Button
+                  onClick={applyToAllActiveDays}
+                  className="bg-orange-500 hover:bg-orange-600 text-white"
+                >
+                  Aplicar para todos
+                </Button>
+              </div>
+
+              <div className="border-t" />
+
               {DAYS_OF_WEEK.map((day) => {
                 const dayHours = getHoursForDay(day.value);
                 const isOpen = isDayOpen(day.value);

@@ -49,30 +49,21 @@ export default function AdminCollaborators() {
   const fetchCollaborators = async () => {
     if (!ctxRestaurantId) return;
 
-    const { data } = await supabase
-      .from("restaurant_collaborators")
-      .select("id, user_id, created_at")
-      .eq("restaurant_id", ctxRestaurantId)
-      .order("created_at", { ascending: false });
+    const { data, error } = await supabase.rpc("list_restaurant_collaborators", {
+      p_restaurant_id: ctxRestaurantId,
+    });
+
+    if (error) {
+      console.error("Erro ao buscar colaboradores:", error);
+      setLoadingList(false);
+      return;
+    }
 
     if (data) {
-      // Fetch profiles for emails and cargo
-      const userIds = data.map(c => c.user_id);
-      const { data: profiles } = await supabase
-        .from("profiles")
-        .select("id, email, full_name, raw_user_meta_data")
-        .in("id", userIds);
-
-      const enriched = data.map(c => {
-        const profile = profiles?.find(p => p.id === c.user_id);
-        return {
-          ...c,
-          email: profile?.email || "—",
-          full_name: profile?.full_name || undefined,
-          cargo: profile?.raw_user_meta_data?.cargo as string || undefined,
-        };
-      });
-
+      const enriched = data.map((c: any) => ({
+        ...c,
+        cargo: c.role || undefined,
+      }));
       setCollaborators(enriched);
     }
 
