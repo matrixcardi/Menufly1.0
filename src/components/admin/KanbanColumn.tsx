@@ -2,6 +2,7 @@ import { Tables } from "@/integrations/supabase/types";
 import { KanbanOrderCard } from "./KanbanOrderCard";
 import { OrderStatus, ORDER_STATUS_LABELS } from "@/types/order";
 import { Clock, ChefHat, Package, HandPlatter, Truck, CheckCircle2 } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 type Order = Tables<"orders">;
 
@@ -16,6 +17,7 @@ interface KanbanColumnProps {
   drivers: any[];
   restaurantName?: string;
   deliveryTimeMin?: number | null;
+  isSingleCard?: boolean;
 }
 
 const statusIcons: Record<OrderStatus, React.ElementType> = {
@@ -51,25 +53,43 @@ export function KanbanColumn({
   drivers,
   restaurantName,
   deliveryTimeMin,
+  isSingleCard,
 }: KanbanColumnProps) {
   const colors = statusColors[status];
   const Icon = statusIcons[status];
 
   return (
-    <div className="flex-shrink-0 w-80 flex flex-col h-full">
+    <div className={cn(
+      "flex flex-col h-full",
+      !isSingleCard && "flex-shrink-0 w-80"
+    )}>
       {/* Column Header */}
-      <div className={`flex items-center gap-2 px-3 py-2 rounded-t-lg border-b-2 ${colors.bg} ${colors.border}`}>
-        <Icon className={`w-4 h-4 ${colors.text}`} />
-        <h3 className={`font-semibold text-sm ${colors.text}`}>
-          {ORDER_STATUS_LABELS[status]}
-        </h3>
-        <span className={`ml-auto text-xs font-bold px-2 py-0.5 rounded-full ${colors.bg} ${colors.text} border ${colors.border}`}>
-          {orders.length}
-        </span>
-      </div>
+      {!isSingleCard && (
+        <div className={cn(
+          "flex items-center gap-2 px-3 py-2 rounded-t-lg border-b-2",
+          colors.bg,
+          colors.border
+        )}>
+          <Icon className={cn("w-4 h-4", colors.text)} />
+          <h3 className={cn("font-semibold text-sm", colors.text)}>
+            {ORDER_STATUS_LABELS[status]}
+          </h3>
+          <span className={cn(
+            "ml-auto text-xs font-bold px-2 py-0.5 rounded-full border",
+            colors.bg,
+            colors.text,
+            colors.border
+          )}>
+            {orders.length}
+          </span>
+        </div>
+      )}
 
       {/* Column Body */}
-      <div className="flex-1 overflow-y-auto px-2 py-3 space-y-3 bg-muted/20 rounded-b-lg border border-border border-t-0">
+      <div className={cn(
+        "flex-1 overflow-y-auto px-2 py-3 space-y-3 bg-muted/20",
+        !isSingleCard ? "rounded-b-lg border border-border border-t-0" : "rounded-lg border border-border"
+      )}>
         {orders.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-32 text-muted-foreground">
             <Icon className="w-8 h-8 opacity-20 mb-2" />

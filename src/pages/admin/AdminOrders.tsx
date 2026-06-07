@@ -99,6 +99,7 @@ export default function AdminOrders() {
   const [autoPrint, setAutoPrint] = useState(() => localStorage.getItem("autoPrintOrders") === "true");
   const [showManualOrder, setShowManualOrder] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [activeTab, setActiveTab] = useState<string>("todos");
   const [addonNamesCache, setAddonNamesCache] = useState<Record<string, string>>({});
   const [addonPricesCache, setAddonPricesCache] = useState<Record<string, number>>({});
   const [driversByRestaurant, setDriversByRestaurant] = useState<Record<string, Driver[]>>({});
@@ -475,6 +476,8 @@ export default function AdminOrders() {
       ) : (
         <KanbanBoard
           orders={sortedOrders}
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
           onOrderClick={(order) => { setSelectedOrder(order); resolveAddonNames(order); }}
           onChangeStatus={changeStatus}
           formatCurrency={formatCurrency}

@@ -186,8 +186,8 @@ export default function AdminDelivery() {
       toast({ title: "Erro ao salvar modo", description: error.message, variant: "destructive" });
       setDeliveryMode(deliveryMode); // revert
     } else {
-      toast({ title: mode === "radius" ? "Modo raio ativado!" : "Modo setores ativado!" });
-      setRestaurant(prev => prev ? { ...prev, delivery_mode: mode } : prev);
+      toast({ title: mode === "radius" ? "Modo raio ativado!" : "Modo setores/bairros ativado!" });
+      setDeliveryMode(mode);
     }
   }
 
@@ -418,7 +418,7 @@ export default function AdminDelivery() {
         }
         else {
           console.log("Insert successful");
-          toast({ title: `${names.length} ${names.length === 1 ? 'setor' : 'setores'} adicionado${names.length === 1 ? '' : 's'}!` });
+          toast({ title: `${names.length} ${names.length === 1 ? 'setor/bairro' : 'setores/bairros'} adicionado${names.length === 1 ? '' : 's'}!` });
         }
       }
     }
@@ -543,10 +543,10 @@ export default function AdminDelivery() {
                 <div className={`p-2 rounded-full ${deliveryMode === "zones" ? "bg-primary text-primary-foreground" : "bg-muted"}`}>
                   <MapPin className="w-5 h-5" />
                 </div>
-                <span className="font-semibold">Limitado por setores</span>
+                <span className="font-semibold">Limitado por setores/bairros</span>
               </div>
               <p className="text-sm text-muted-foreground">
-                O cliente seleciona cidade e setor entre os cadastrados. Taxa definida por zona.
+                O cliente seleciona cidade e setor/bairro entre os cadastrados. Taxa definida por zona.
               </p>
             </button>
 
@@ -771,16 +771,16 @@ export default function AdminDelivery() {
           <DialogHeader>
             <DialogTitle>
               {editingZone
-                ? deliveryMode === "radius" ? "Editar Faixa" : "Editar Setor"
-                : deliveryMode === "radius" ? "Nova Faixa de Raio" : "Adicionar Setores"
+                ? deliveryMode === "radius" ? "Editar Faixa" : "Editar Setor/Bairro"
+                : deliveryMode === "radius" ? "Nova Faixa de Raio" : "Adicionar Setores/Bairros"
               }
             </DialogTitle>
             <DialogDescription>
               {deliveryMode === "radius"
                 ? "Defina a faixa de distância e o valor da taxa"
                 : editingZone
-                  ? "Edite as informações deste setor"
-                  : "Adicione vários setores de uma vez separando por vírgula"
+                  ? "Edite as informações deste setor/bairro"
+                  : "Adicione vários setores/bairros de uma vez separando por vírgula"
               }
             </DialogDescription>
           </DialogHeader>
@@ -815,22 +815,22 @@ export default function AdminDelivery() {
                 <div className="space-y-2">
                   <Label>Cidade</Label>
                   <Input placeholder="Ex: São Paulo, Campinas" value={zoneCity} onChange={(e) => setZoneCity(e.target.value)} />
-                  <p className="text-xs text-muted-foreground">Opcional — agrupar setores por cidade</p>
+                  <p className="text-xs text-muted-foreground">Opcional — agrupar setores/bairros por cidade</p>
                 </div>
                 <div className="space-y-2">
-                  <Label>{editingZone ? "Nome do Setor *" : "Setores *"}</Label>
+                  <Label>{editingZone ? "Nome do Setor/Bairro *" : "Setores/Bairros *"}</Label>
                   {editingZone ? (
                     <Input placeholder="Ex: Centro" value={zoneName} onChange={(e) => setZoneName(e.target.value)} />
                   ) : (
                     <>
                       <textarea
                         className="flex min-h-[120px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                        placeholder={"Cole ou digite os setores:\n\nCentro\nJardins\nVila Madalena\n\nOu separados por vírgula: Centro, Jardins"}
+                        placeholder={"Cole ou digite os setores/bairros:\n\nCentro\nJardins\nVila Madalena\n\nOu separados por vírgula: Centro, Jardins"}
                         value={zoneName}
                         onChange={(e) => setZoneName(e.target.value)}
                       />
                       {bulkCount > 0 && (
-                        <Badge variant="secondary" className="w-fit">{bulkCount} {bulkCount === 1 ? 'setor' : 'setores'} detectado{bulkCount === 1 ? '' : 's'}</Badge>
+                        <Badge variant="secondary" className="w-fit">{bulkCount} {bulkCount === 1 ? 'setor/bairro' : 'setores/bairros'} detectado{bulkCount === 1 ? '' : 's'}</Badge>
                       )}
                     </>
                   )}
@@ -857,7 +857,7 @@ export default function AdminDelivery() {
                       }
                     }}
                   />
-                  <Label htmlFor="zone-active" className="text-sm">Setor ativo</Label>
+                  <Label htmlFor="zone-active" className="text-sm">Setor/Bairro ativo</Label>
                 </div>
               </>
             )}
@@ -1047,13 +1047,13 @@ function NeighborhoodZonesCard({
           Zonas de Entrega
         </CardTitle>
         <CardDescription>
-          Cadastre as cidades e setores onde você entrega. Apenas clientes dessas localidades poderão fazer pedidos para entrega.
+          Cadastre as cidades e setores/bairros onde você entrega. Apenas clientes dessas localidades poderão fazer pedidos para entrega.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="flex items-center justify-between flex-wrap gap-2">
           <p className="text-sm text-muted-foreground">
-            Adicione as cidades e setores atendidos com suas respectivas taxas.
+            Adicione as cidades e setores/bairros atendidos com suas respectivas taxas.
           </p>
         </div>
 
@@ -1069,7 +1069,7 @@ function NeighborhoodZonesCard({
               </DialogTrigger>
               <DialogContent>
                 <DialogHeader>
-                  <DialogTitle>Editar {selectedIds.size} {selectedIds.size === 1 ? 'setor' : 'setores'}</DialogTitle>
+                  <DialogTitle>Editar {selectedIds.size} {selectedIds.size === 1 ? 'setor/bairro' : 'setores/bairros'}</DialogTitle>
                   <DialogDescription>Preencha apenas os campos que deseja alterar</DialogDescription>
                 </DialogHeader>
                 <div className="space-y-4 py-4">
@@ -1102,11 +1102,11 @@ function NeighborhoodZonesCard({
         {zones.length === 0 ? (
           <div className="text-center py-12">
             <MapPin className="w-12 h-12 mx-auto mb-4 opacity-50 text-muted-foreground" />
-            <p className="text-muted-foreground mb-4">Nenhum setor cadastrado</p>
-            <p className="text-sm text-muted-foreground mb-6">Adicione setores para configurar as taxas de entrega</p>
+            <p className="text-muted-foreground mb-4">Nenhum setor/bairro cadastrado</p>
+            <p className="text-sm text-muted-foreground mb-6">Adicione setores/bairros para configurar as taxas de entrega</p>
             <Button onClick={openAddDialog}>
               <Plus className="w-4 h-4 mr-2" />
-              Adicionar Setor
+              Adicionar Setor/Bairro
             </Button>
           </div>
         ) : (
@@ -1143,7 +1143,7 @@ function NeighborhoodZonesCard({
                         className="h-7 text-xs ml-auto"
                         type="button"
                         onClick={(e) => {
-                          console.log("Botão Adicionar Setor clicado", { city, dialogOpen });
+                          console.log("Botão Adicionar Setor/Bairro clicado", { city, dialogOpen });
                           e.preventDefault();
                           e.stopPropagation();
                           setZoneCity(city === "Sem cidade" ? "" : city);
@@ -1154,7 +1154,7 @@ function NeighborhoodZonesCard({
                           console.log("setDialogOpen(true) chamado");
                         }}
                       >
-                        <Plus className="w-3.5 h-3.5 mr-1" />Adicionar Setor
+                        <Plus className="w-3.5 h-3.5 mr-1" />Adicionar Setor/Bairro
                       </Button>
                       <Button
                         variant="ghost"
@@ -1180,7 +1180,7 @@ function NeighborhoodZonesCard({
                     <TableHeader>
                       <TableRow>
                         <TableHead className="w-10"></TableHead>
-                        <TableHead>Setor</TableHead>
+                        <TableHead>Setor/Bairro</TableHead>
                         <TableHead>Taxa</TableHead>
                         <TableHead>Tempo</TableHead>
                         <TableHead>Ativo</TableHead>

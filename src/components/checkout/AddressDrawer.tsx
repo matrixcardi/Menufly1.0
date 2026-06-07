@@ -357,7 +357,7 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
         return;
       }
       if (!isRadiusMode && !selectedZoneId) {
-        setErrors({ neighborhood: "Selecione o setor" });
+        setErrors({ neighborhood: "Selecione o setor/bairro" });
         return;
       }
       if (isRadiusMode && isOutOfRange) {
@@ -856,7 +856,7 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
                         }`}
                       >
                         <MapPin className="w-4 h-4 text-primary flex-shrink-0" />
-                        <span className="text-sm font-medium">Selecionar setor</span>
+                        <span className="text-sm font-medium">Selecionar setor/bairro</span>
                       </button>
                       <button
                         type="button"
@@ -1153,7 +1153,7 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
                     )}
 
                     <div className="space-y-2">
-                      <Label className="text-sm font-medium">Setor *</Label>
+                      <Label className="text-sm font-medium">Setor/Bairro *</Label>
                       <div className="relative">
                         <select
                           value={selectedZoneId}
@@ -1161,7 +1161,7 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
                           disabled={hasMultipleCities && !selectedCity}
                           className="w-full h-12 text-base rounded-md border border-input bg-background px-3 pr-10 appearance-none focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
                         >
-                          <option value="">Selecione seu setor</option>
+                          <option value="">Selecione seu setor/bairro</option>
                           {availableNeighborhoods.map((zone) => (
                             <option key={zone.id} value={zone.id}>
                               {zone.name} — R$ {zone.fee.toFixed(2)}

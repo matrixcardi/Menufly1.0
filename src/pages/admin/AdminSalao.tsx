@@ -63,6 +63,7 @@ interface ActiveOrder {
   order_number: string;
   items: OrderItem[];
   subtotal: number;
+  discount: number;
   total: number;
   people_count: number | null;
   table_number: number | null;
@@ -334,11 +335,84 @@ export default function AdminSalao() {
       order_number: data.order_number,
       items,
       subtotal: Number(data.subtotal),
+      discount: Number(data.discount || 0),
       total: Number(data.total),
       people_count: (data as any).people_count ?? null,
       table_number: (data as any).table_number ?? null,
       created_at: data.created_at,
     });
+  };
+
+  const updateActiveOrderItems = async (newItems: OrderItem[]) => {
+    if (!activeOrder) return;
+    
+    const newSubtotal = newItems.reduce((s, i) => s + i.price * i.quantity, 0);
+    const newTotal = Math.max(0, newSubtotal - activeOrder.discount);
+
+    try {
+      const { error } = await supabase.from("orders")
+        .update({ 
+          items: newItems as any, 
+          subtotal: newSubtotal, 
+          total: newTotal 
+        })
+        .eq("id", activeOrder.id);
+        
+      if (error) throw error;
+      
+      setActiveOrder({ 
+        ...activeOrder, 
+        items: newItems, 
+        subtotal: newSubtotal, 
+        total: newTotal 
+      });
+      
+      toast({ title: "Comanda atualizada" });
+    } catch (e: any) {
+      console.error(e);
+      toast({ title: "Erro ao atualizar comanda", description: e?.message, variant: "destructive" });
+    }
+  };
+
+  const handleUpdateActiveOrderItemQty = async (item: OrderItem, delta: number) => {
+    if (!activeOrder) return;
+    
+    const confirmed = await confirm({
+      title: "Alterar item da comanda",
+      description: `Deseja alterar a quantidade de "${item.name}"? Isso afetará o total da mesa.`,
+    });
+    
+    if (!confirmed) return;
+
+    const newItems = [...activeOrder.items];
+    const idx = newItems.findIndex(i => i.product_id === item.product_id && i.observation === item.observation);
+    
+    if (idx === -1) return;
+    
+    const newQty = newItems[idx].quantity + delta;
+    
+    if (newQty <= 0) {
+      newItems.splice(idx, 1);
+    } else {
+      newItems[idx] = { ...newItems[idx], quantity: newQty };
+    }
+    
+    await updateActiveOrderItems(newItems);
+  };
+
+  const handleRemoveActiveOrderItem = async (item: OrderItem) => {
+    if (!activeOrder) return;
+    
+    const confirmed = await confirm({
+      title: "Remover item da comanda",
+      description: `Deseja remover completamente "${item.name}" da comanda?`,
+    });
+    
+    if (!confirmed) return;
+
+    const newItems = activeOrder.items.filter(i => !(i.product_id === item.product_id && i.observation === item.observation));
+    
+    await updateActiveOrderItems(newItems);
   };
 
   const handleOpenTable = async (peopleCount: number) => {
@@ -405,17 +479,18 @@ export default function AdminSalao() {
           }
         });
         const newSubtotal = merged.reduce((s, i) => s + i.price * i.quantity, 0);
+        const newTotal = Math.max(0, newSubtotal - activeOrder.discount);
         const { error } = await supabase.from("orders")
           .update({ 
             items: merged as any, 
             subtotal: newSubtotal, 
-            total: newSubtotal,
+            total: newTotal,
             sent_to_kitchen_at: new Date().toISOString(),
             kitchen_status: "pending"
           })
           .eq("id", activeOrder.id);
         if (error) throw error;
-        setActiveOrder({ ...activeOrder, items: merged, subtotal: newSubtotal, total: newSubtotal });
+        setActiveOrder({ ...activeOrder, items: merged, subtotal: newSubtotal, total: newTotal });
         // Print only the NEW items
         printKitchenTicket({
           tableNumber: selectedTable.number,
@@ -464,6 +539,7 @@ export default function AdminSalao() {
           order_number: orderData.order_number,
           items: newItems,
           subtotal: orderData.subtotal,
+          discount: 0,
           total: orderData.total,
           people_count: selectedTable.people_count ?? null,
           table_number: selectedTable.number,
@@ -1115,12 +1191,33 @@ export default function AdminSalao() {
               </div>
               <div className="space-y-0.5">
                 {activeOrder.items.map((item, idx) => (
-                  <div key={idx} className="flex justify-between text-xs text-orange-800 dark:text-orange-200">
-                    <span className="flex items-center gap-1.5">
-                      <span className="font-semibold text-orange-600 dark:text-orange-400 w-5 text-right flex-shrink-0">[{item.quantity}x]</span>
-                      <span>{item.name}</span>
-                    </span>
-                    <span className="text-orange-600 dark:text-orange-400 flex-shrink-0 ml-2">R$ {(item.price * item.quantity).toFixed(2)}</span>
+                  <div key={idx} className="flex items-center justify-between py-1 group border-b border-orange-100/50 dark:border-orange-900/50 last:border-0">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="font-bold text-orange-700 dark:text-orange-300 w-7 text-right">[{item.quantity}x]</span>
+                      <div className="flex flex-col min-w-0">
+                        <span className="text-sm font-medium truncate">{item.name}</span>
+                        {item.observation && <span className="text-[10px] opacity-70 italic truncate">"{item.observation}"</span>}
+                      </div>
+                    </div>
+                    
+                    <div className="flex items-center gap-3 ml-2 flex-shrink-0">
+                      <span className="text-xs font-semibold text-orange-700 dark:text-orange-300">R$ {(item.price * item.quantity).toFixed(2)}</span>
+                      
+                      <div className="flex items-center bg-orange-100 dark:bg-orange-900/40 rounded-md p-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <Button variant="ghost" size="icon" className="h-6 w-6 text-orange-700 dark:text-orange-300 hover:bg-orange-200 dark:hover:bg-orange-800"
+                          onClick={() => handleUpdateActiveOrderItemQty(item, -1)}>
+                          <Minus className="w-3 h-3" />
+                        </Button>
+                        <Button variant="ghost" size="icon" className="h-6 w-6 text-orange-700 dark:text-orange-300 hover:bg-orange-200 dark:hover:bg-orange-800"
+                          onClick={() => handleUpdateActiveOrderItemQty(item, 1)}>
+                          <Plus className="w-3 h-3" />
+                        </Button>
+                        <Button variant="ghost" size="icon" className="h-6 w-6 text-red-500 hover:bg-red-100 dark:hover:bg-red-900/30"
+                          onClick={() => handleRemoveActiveOrderItem(item)}>
+                          <Trash2 className="w-3 h-3" />
+                        </Button>
+                      </div>
+                    </div>
                   </div>
                 ))}
               </div>
