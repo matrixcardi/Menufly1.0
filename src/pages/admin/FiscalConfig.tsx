@@ -17,25 +17,34 @@ export default function FiscalConfig() {
     const storedRestaurantId = localStorage.getItem("restaurant_id");
     if (storedRestaurantId) {
       setRestaurantId(storedRestaurantId);
+    } else {
+      setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    if (!restaurantId) return;
-
     const fetchFiscalConfig = async () => {
-      setLoading(true);
+      if (!restaurantId) {
+        setLoading(false);
+        return;
+      }
+
       try {
+        setLoading(true);
         const { data, error } = await supabase
           .from("fiscal_config")
           .select("*")
           .eq("restaurant_id", restaurantId)
           .maybeSingle();
 
-        if (error) throw error;
-        setFiscalConfig(data);
-      } catch (error) {
-        console.error("[FISCAL] Erro ao buscar config:", error);
+        if (error) {
+          console.error("[FISCAL] Erro ao carregar config:", error);
+        } else {
+          setFiscalConfig(data);
+          console.log("[FISCAL] Config carregada:", data);
+        }
+      } catch (err) {
+        console.error("[FISCAL] Exception:", err);
       } finally {
         setLoading(false);
       }
