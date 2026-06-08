@@ -120,11 +120,11 @@ export function CartDrawer({ open, onOpenChange, onProductClick, restaurantId, r
                 {/* Cart Items */}
                 <div className="p-4 space-y-3">
                 {items.map((item) => {
-                    // Get all selected addons
-                    const selectedAddons = Object.entries(item.addons || {}).flatMap(([sectionId, addonIds]) => {
-                      if (!addonIds || addonIds.length === 0) return [];
-                      return addonIds;
-                    });
+                    // Get all selected addons with quantities
+                    const selectedAddons = Object.entries(item.addons || {}).flatMap(([sectionId, addonQtyMap]) => {
+                      if (!addonQtyMap) return [];
+                      return Object.entries(addonQtyMap).map(([addonId, qty]) => ({ addonId, qty }));
+                    }).filter(({ qty }) => qty > 0);
 
                     return (
                       <div
@@ -140,14 +140,14 @@ export function CartDrawer({ open, onOpenChange, onProductClick, restaurantId, r
                           <h4 className="font-semibold text-sm truncate">
                             {item.product.name}
                           </h4>
-                          
-                          {/* Display selected addons */}
+
+                          {/* Display selected addons with quantities */}
                           {selectedAddons.length > 0 && (
                             <div className="mt-1 space-y-0.5">
-                              {selectedAddons.map((addonId) => (
+                              {selectedAddons.map(({ addonId, qty }) => (
                                 <p key={addonId} className="text-xs text-muted-foreground flex items-center gap-1">
                                   <span className="text-primary">+</span>
-                                  <span>{item.addonNames?.[addonId] || addonId}</span>
+                                  <span>{qty > 1 ? `${qty}x ` : ""}{item.addonNames?.[addonId] || addonId}</span>
                                 </p>
                               ))}
                             </div>

@@ -18,6 +18,18 @@ interface KanbanColumnProps {
   restaurantName?: string;
   deliveryTimeMin?: number | null;
   isSingleCard?: boolean;
+  selectedOrders?: string[];
+  onToggleSelection?: (orderId: string) => void;
+  showCheckbox?: boolean;
+  fiscalConfig?: {
+    is_configured: boolean;
+    is_active: boolean;
+    provider: string;
+    environment: string;
+  } | null;
+  fiscalInvoices?: Record<string, any>;
+  restaurantId?: string;
+  onInvoiceUpdate?: (orderId: string, invoice: any) => void;
 }
 
 const statusIcons: Record<OrderStatus, React.ElementType> = {
@@ -54,6 +66,13 @@ export function KanbanColumn({
   restaurantName,
   deliveryTimeMin,
   isSingleCard,
+  selectedOrders,
+  onToggleSelection,
+  showCheckbox,
+  fiscalConfig,
+  fiscalInvoices,
+  restaurantId,
+  onInvoiceUpdate,
 }: KanbanColumnProps) {
   const colors = statusColors[status];
   const Icon = statusIcons[status];
@@ -108,6 +127,13 @@ export function KanbanColumn({
               drivers={drivers}
               restaurantName={restaurantName}
               deliveryTimeMin={deliveryTimeMin}
+              isSelected={selectedOrders?.includes(order.id) || false}
+              onToggleSelection={onToggleSelection}
+              showCheckbox={showCheckbox}
+              fiscalConfig={fiscalConfig}
+              fiscalInvoices={fiscalInvoices}
+              restaurantId={restaurantId}
+              onInvoiceUpdate={onInvoiceUpdate}
             />
           ))
         )}

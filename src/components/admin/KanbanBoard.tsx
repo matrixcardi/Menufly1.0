@@ -1,8 +1,9 @@
 import { Tables } from "@/integrations/supabase/types";
 import { KanbanColumn } from "./KanbanColumn";
 import { OrderStatus, KANBAN_COLUMNS, ORDER_STATUS_LABELS } from "@/types/order";
-import { Clock, ChefHat, Package, HandPlatter, Truck, CheckCircle2, LayoutDashboard } from "lucide-react";
+import { Clock, ChefHat, Package, HandPlatter, Truck, CheckCircle2, LayoutDashboard, Printer, CheckSquare, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 
 type Order = Tables<"orders">;
 
@@ -18,6 +19,20 @@ interface KanbanBoardProps {
   drivers: any[];
   restaurantName?: string;
   deliveryTimeMin?: number | null;
+  selectedOrders?: string[];
+  onToggleSelection?: (orderId: string) => void;
+  onSelectTodayOrders?: () => void;
+  onClearSelection?: () => void;
+  onBatchPrint?: () => void;
+  fiscalConfig?: {
+    is_configured: boolean;
+    is_active: boolean;
+    provider: string;
+    environment: string;
+  } | null;
+  fiscalInvoices?: Record<string, any>;
+  restaurantId?: string;
+  onInvoiceUpdate?: (orderId: string, invoice: any) => void;
 }
 
 const statusIcons: Record<OrderStatus, React.ElementType> = {
@@ -43,6 +58,15 @@ export function KanbanBoard({
   drivers,
   restaurantName,
   deliveryTimeMin,
+  selectedOrders,
+  onToggleSelection,
+  onSelectTodayOrders,
+  onClearSelection,
+  onBatchPrint,
+  fiscalConfig,
+  fiscalInvoices,
+  restaurantId,
+  onInvoiceUpdate,
 }: KanbanBoardProps) {
   // Group orders by status
   const ordersByStatus = KANBAN_COLUMNS.reduce((acc, status) => {
@@ -106,6 +130,53 @@ export function KanbanBoard({
         })}
       </div>
 
+      {/* Action bar for delivered tab */}
+      {activeTab === "delivered" && (
+        <>
+          <div className="mb-4 px-3 py-2 bg-muted/50 border border-border rounded-lg flex items-center gap-2 sm:gap-4 text-sm">
+            <div className="flex items-center gap-2 text-muted-foreground">
+              <CheckSquare className="w-4 h-4" />
+              <span>{selectedOrders && selectedOrders.length > 0 ? `${selectedOrders.length} selecionado(s)` : "Nenhum selecionado"}</span>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onSelectTodayOrders}
+              className="h-7"
+            >
+              Selecionar todos
+            </Button>
+            {selectedOrders && selectedOrders.length > 0 && (
+              <>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={onClearSelection}
+                  className="h-7"
+                >
+                  Limpar
+                </Button>
+                <Button
+                  variant="default"
+                  size="sm"
+                  onClick={onBatchPrint}
+                  className="gap-2 h-7"
+                >
+                  <Printer className="w-3.5 h-3.5" />
+                  Imprimir {selectedOrders.length}
+                </Button>
+              </>
+            )}
+          </div>
+          {/* Empty state hint */}
+          {(!selectedOrders || selectedOrders.length === 0) && (
+            <div className="mb-3 text-xs text-muted-foreground text-center">
+              💡 Marque a caixa de seleção nos pedidos para imprimir ou emitir notas em lote
+            </div>
+          )}
+        </>
+      )}
+
       {/* Kanban columns or single column */}
       <div className="flex-1 overflow-x-auto overflow-y-hidden">
         <div className={cn(
@@ -126,6 +197,10 @@ export function KanbanBoard({
                 drivers={drivers}
                 restaurantName={restaurantName}
                 deliveryTimeMin={deliveryTimeMin}
+                fiscalConfig={fiscalConfig}
+                fiscalInvoices={fiscalInvoices}
+                restaurantId={restaurantId}
+                onInvoiceUpdate={onInvoiceUpdate}
               />
             ))
           ) : (
@@ -145,6 +220,13 @@ export function KanbanBoard({
                       restaurantName={restaurantName}
                       deliveryTimeMin={deliveryTimeMin}
                       isSingleCard={true}
+                      selectedOrders={selectedOrders}
+                      onToggleSelection={onToggleSelection}
+                      showCheckbox={activeTab === "delivered"}
+                      fiscalConfig={fiscalConfig}
+                      fiscalInvoices={fiscalInvoices}
+                      restaurantId={restaurantId}
+                      onInvoiceUpdate={onInvoiceUpdate}
                     />
                   </div>
                 ))}

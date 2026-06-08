@@ -1,9 +1,10 @@
 import { createContext, useContext, useState, useEffect, useMemo, ReactNode } from "react";
 import { trackAddToCart } from "@/lib/meta-pixel";
 import { Product } from "@/data/menu-data";
-import { SelectedAddons } from "@/components/menu/ProductDrawer";
 import { useAutoPromos, evaluateAutoPromos, ActiveBenefit, AutoPromo } from "@/hooks/useAutoPromos";
 import { supabase } from "@/integrations/supabase/client";
+
+export type SelectedAddons = Record<string, Record<string, number>>;
 
 export interface CartItem {
   id: string;

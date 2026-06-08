@@ -25,7 +25,7 @@ interface PromoKit {
   discount_type: string | null;
   schedule_type: string;
   schedule_days: number[];
-  schedule_start_date: string | null;
+  schedule_start_date: string | null; 
   schedule_end_date: string | null;
   schedule_start_time: string | null;
   schedule_end_time: string | null;

@@ -22,6 +22,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useAddonGroups, AddonGroupWithItems } from "@/hooks/useAddonGroups";
 import { cn } from "@/lib/utils";
+import { AddressForm, CpfNotaToggle, SchedulingToggle } from "@/components/forms";
 
 interface Product {
   id: string;
@@ -279,7 +280,6 @@ export function ManualOrderDrawer({ open, onOpenChange, restaurantId }: ManualOr
   const [step, setStep] = useState<"products" | "customer" | "review">("products");
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
-  const [customerAddress, setCustomerAddress] = useState("");
   const [deliveryType, setDeliveryType] = useState<"delivery" | "pickup">("pickup");
   const [paymentMethod, setPaymentMethod] = useState<"pix" | "cash" | "card">("cash");
   const [notes, setNotes] = useState("");
@@ -293,6 +293,31 @@ export function ManualOrderDrawer({ open, onOpenChange, restaurantId }: ManualOr
   const [submitting, setSubmitting] = useState(false);
   const [pickerProduct, setPickerProduct] = useState<Product | null>(null);
   const { toast } = useToast();
+
+  // New fields for structured address, CPF, and scheduling
+  const [addressData, setAddressData] = useState<{
+    street: string;
+    number: string;
+    complement: string;
+    reference: string;
+    neighborhood: string;
+    cep: string;
+    city: string;
+    zoneId: string;
+  }>({
+    street: "",
+    number: "",
+    complement: "",
+    reference: "",
+    neighborhood: "",
+    cep: "",
+    city: "",
+    zoneId: "",
+  });
+  const [deliveryFee, setDeliveryFee] = useState(0);
+  const [cpfCnpj, setCpfCnpj] = useState<string | null>(null);
+  const [scheduledAt, setScheduledAt] = useState<string | null>(null);
+  const [schedulingType, setSchedulingType] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open || !restaurantId) return;
@@ -323,7 +348,6 @@ export function ManualOrderDrawer({ open, onOpenChange, restaurantId }: ManualOr
       setStep("products");
       setCustomerName("");
       setCustomerPhone("");
-      setCustomerAddress("");
       setDeliveryType("pickup");
       setPaymentMethod("cash");
       setNotes("");
@@ -333,6 +357,21 @@ export function ManualOrderDrawer({ open, onOpenChange, restaurantId }: ManualOr
       setSearchQuery("");
       setSelectedCategory(null);
       setPickerProduct(null);
+      // Reset new fields
+      setAddressData({
+        street: "",
+        number: "",
+        complement: "",
+        reference: "",
+        neighborhood: "",
+        cep: "",
+        city: "",
+        zoneId: "",
+      });
+      setDeliveryFee(0);
+      setCpfCnpj(null);
+      setScheduledAt(null);
+      setSchedulingType(null);
     }
   }, [open]);
 
@@ -391,9 +430,32 @@ export function ManualOrderDrawer({ open, onOpenChange, restaurantId }: ManualOr
     return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
   };
 
+  // Helper to concatenate address for display and submission
+  const getFormattedAddress = () => {
+    if (deliveryType !== "delivery") return "";
+    const addressParts = [
+      addressData.street,
+      addressData.number,
+      addressData.complement,
+      addressData.neighborhood,
+      addressData.city,
+      addressData.cep ? `CEP ${addressData.cep}` : null,
+      addressData.reference ? `Ref: ${addressData.reference}` : null,
+    ].filter(Boolean);
+    return addressParts.join(" - ");
+  };
+
   const canProceedToProducts = customerName.length >= 2 && customerPhone.replace(/\D/g, "").length >= 10;
   const canProceedToReview = cart.length > 0;
-  const canSubmit = canProceedToProducts && canProceedToReview && (deliveryType === "pickup" || customerAddress.length >= 5);
+  const canSubmit = canProceedToProducts && canProceedToReview && (
+    deliveryType === "pickup" || (
+      addressData.street.length >= 3 &&
+      addressData.number.length >= 1 &&
+      addressData.cep.length === 9 &&
+      addressData.city.length > 0 &&
+      addressData.zoneId.length > 0
+    )
+  );
 
   const handleSubmit = async () => {
     if (!canSubmit) return;
@@ -420,18 +482,28 @@ export function ManualOrderDrawer({ open, onOpenChange, restaurantId }: ManualOr
       needsChange && changeFor ? `Troco para R$ ${changeFor}` : needsChange ? "Precisa de troco" : "",
     ].filter(Boolean).join(" | ") || null;
 
-    const { data, error } = await supabase.rpc("submit_order", {
+    const customerAddress = getFormattedAddress();
+
+    const payload = {
       p_restaurant_id: restaurantId,
       p_customer_name: customerName.trim(),
       p_customer_phone: customerPhone,
-      p_customer_address: deliveryType === "delivery" ? customerAddress : "",
+      p_customer_address: customerAddress,
       p_delivery_type: deliveryType,
       p_payment_method: effectivePaymentMethod,
       p_items: orderItems as any,
       p_coupon_code: null,
       p_notes: combinedNotes,
       p_promo_id: null,
-    });
+      p_delivery_fee: deliveryType === "delivery" ? deliveryFee : 0,
+      p_cpf_cnpj_nota: cpfCnpj,
+      p_scheduled_at: scheduledAt,
+      p_scheduling_type: schedulingType,
+    };
+
+    console.log("[PEDIDO MANUAL] payload final:", payload);
+
+    const { data, error } = await supabase.rpc("submit_order", payload);
 
     setSubmitting(false);
 
@@ -528,17 +600,28 @@ export function ManualOrderDrawer({ open, onOpenChange, restaurantId }: ManualOr
                 </RadioGroup>
               </div>
 
+              {/* Scheduling Toggle */}
+              {deliveryType && (
+                <SchedulingToggle
+                  restaurantId={restaurantId}
+                  deliveryMethod={deliveryType}
+                  onSchedulingChange={(scheduledAt, schedulingType) => {
+                    setScheduledAt(scheduledAt);
+                    setSchedulingType(schedulingType);
+                  }}
+                />
+              )}
+
+              {/* Address Form for delivery */}
               {deliveryType === "delivery" && (
-                <div className="space-y-2">
-                  <Label htmlFor="address">Endereço de entrega *</Label>
-                  <Textarea
-                    id="address"
-                    placeholder="Rua, número, bairro, complemento..."
-                    value={customerAddress}
-                    onChange={(e) => setCustomerAddress(e.target.value)}
-                    rows={3}
-                  />
-                </div>
+                <AddressForm
+                  restaurantId={restaurantId}
+                  onAddressChange={(address, fee) => {
+                    setAddressData(address);
+                    setDeliveryFee(fee);
+                  }}
+                  showDeliveryFee={true}
+                />
               )}
 
               <div className="space-y-2">
@@ -588,6 +671,11 @@ export function ManualOrderDrawer({ open, onOpenChange, restaurantId }: ManualOr
                 </div>
               )}
               </div>
+
+              {/* CPF/CNPJ Toggle */}
+              <CpfNotaToggle
+                onCpfChange={(cpfCnpj) => setCpfCnpj(cpfCnpj)}
+              />
 
               <div className="space-y-2">
                 <Label htmlFor="notes">Observações gerais</Label>
@@ -740,8 +828,8 @@ export function ManualOrderDrawer({ open, onOpenChange, restaurantId }: ManualOr
                 <Badge variant="outline">
                   {deliveryType === "delivery" ? "🛵 Entrega" : "🏪 Retirada"}
                 </Badge>
-                {deliveryType === "delivery" && customerAddress && (
-                  <p className="text-sm text-muted-foreground">{customerAddress}</p>
+                {deliveryType === "delivery" && getFormattedAddress() && (
+                  <p className="text-sm text-muted-foreground">{getFormattedAddress()}</p>
                 )}
               </div>
 

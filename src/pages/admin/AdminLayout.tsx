@@ -80,6 +80,7 @@ import {
   Armchair,
   Plus,
   X,
+  Receipt,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -145,6 +146,7 @@ const settingsItems = [
   { title: "Entrega", url: "/admin/entrega", icon: Truck, restrictCollaborator: true },
   { title: "Entregadores", url: "/admin/entregadores", icon: Bike, restrictCollaborator: true },
   { title: "Pagamentos", url: "/admin/pagamentos", icon: CreditCard, restrictCollaborator: true },
+  { title: "Notas Fiscais", url: "/admin/configuracoes/fiscal", icon: Receipt, restrictCollaborator: true },
   { title: "Minha Assinatura", url: "/admin/assinatura", icon: Crown, restrictCollaborator: true },
   { title: "Meu Negócio", url: "/admin/negocio", icon: Store, restrictCollaborator: true },
   { title: "Impressora", url: "/admin/impressora", icon: Printer, restrictCollaborator: true },

@@ -3,9 +3,12 @@ import { OrderStatus, ORDER_STATUS_TRANSITIONS, ORDER_STATUS_LABELS, DELIVERY_ST
 import { Clock, ChefHat, Package, HandPlatter, Truck, CheckCircle2, XCircle, Check, Phone, MapPin, CreditCard, Calendar } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { OrderCountdown } from "@/components/admin/OrderCountdown";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import EmitirNFeButton from "@/components/admin/fiscal/EmitirNFeButton";
+import NFeStatusBadge from "@/components/admin/fiscal/NFeStatusBadge";
 
 type Order = Tables<"orders">;
 
@@ -19,6 +22,18 @@ interface KanbanOrderCardProps {
   drivers: any[];
   restaurantName?: string;
   deliveryTimeMin?: number | null;
+  isSelected?: boolean;
+  onToggleSelection?: (orderId: string) => void;
+  showCheckbox?: boolean;
+  fiscalConfig?: {
+    is_configured: boolean;
+    is_active: boolean;
+    provider: string;
+    environment: string;
+  } | null;
+  fiscalInvoices?: Record<string, any>;
+  restaurantId?: string;
+  onInvoiceUpdate?: (orderId: string, invoice: any) => void;
 }
 
 const statusIcons: Record<OrderStatus, React.ElementType> = {
@@ -55,6 +70,13 @@ export function KanbanOrderCard({
   drivers,
   restaurantName,
   deliveryTimeMin,
+  isSelected,
+  onToggleSelection,
+  showCheckbox,
+  fiscalConfig,
+  fiscalInvoices,
+  restaurantId,
+  onInvoiceUpdate,
 }: KanbanOrderCardProps) {
   const status = order.status as OrderStatus;
   const colors = statusColors[status];
@@ -94,12 +116,14 @@ export function KanbanOrderCard({
       className={`w-full rounded-lg border bg-card shadow-sm overflow-hidden transition-all duration-200 hover:shadow-md text-left relative ${
         isNew
           ? "border-amber-400 dark:border-amber-600 ring-1 ring-amber-300/50 dark:ring-amber-600/30"
+          : isSelected
+          ? "border-orange-500 dark:border-orange-600 ring-2 ring-orange-400/50 dark:ring-orange-600/30"
           : colors.border
       }`}
     >
       {/* Status bar */}
       <div className={`h-1 ${colors.bg.replace("bg-", "bg-").replace("/30", "")} ${isNew ? "animate-pulse" : ""}`} />
-      
+
       {isNew && (
         <span className="absolute top-2 right-2 flex items-center gap-1">
           <span className="relative flex h-2 w-2">
@@ -113,6 +137,15 @@ export function KanbanOrderCard({
         {/* Header */}
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-2">
+            {/* Checkbox for selection */}
+            {showCheckbox && (
+              <Checkbox
+                checked={isSelected}
+                onClick={(e) => e.stopPropagation()}
+                onCheckedChange={() => onToggleSelection?.(order.id)}
+                className="w-5 h-5 border-2 border-white/80 shadow-sm data-[state=checked]:bg-orange-500 data-[state=checked]:border-orange-500"
+              />
+            )}
             <span className="text-sm font-bold">#{order.daily_number ?? order.order_number}</span>
             <div className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold ${colors.bg} ${colors.text}`}>
               <Icon className="w-3 h-3" />
@@ -120,16 +153,40 @@ export function KanbanOrderCard({
             </div>
             {/* Delivery Type Badge */}
             <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
-              deliveryType === "delivery" 
-                ? "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300" 
+              deliveryType === "delivery"
+                ? "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300"
                 : "bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300"
             }`}>
               {deliveryType === "delivery" ? "🚚 Delivery" : "🏪 Retirada"}
             </span>
+            {/* NFe Status Badge */}
+            {fiscalInvoices?.[order.id] && (
+              <NFeStatusBadge
+                status={fiscalInvoices[order.id].status}
+                nfeNumber={fiscalInvoices[order.id].nfe_number}
+              />
+            )}
           </div>
-          <span className={`text-[10px] ${isNew ? "mr-4" : ""} text-muted-foreground`}>
-            {createdAt.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
-          </span>
+          <div className="flex items-center gap-2">
+            {/* Emitir NFe Button */}
+            {restaurantId && (
+              <EmitirNFeButton
+                orderId={order.id}
+                orderTotal={Number(order.total)}
+                orderNumber={order.daily_number ?? order.order_number}
+                restaurantId={restaurantId}
+                fiscalActive={fiscalConfig?.is_active ?? false}
+                fiscalConfigured={fiscalConfig?.is_configured ?? false}
+                fiscalProvider={fiscalConfig?.provider}
+                fiscalEnvironment={fiscalConfig?.environment}
+                existingInvoice={fiscalInvoices?.[order.id]}
+                onInvoiceUpdate={(invoice) => onInvoiceUpdate?.(order.id, invoice)}
+              />
+            )}
+            <span className={`text-[10px] ${isNew ? "mr-4" : ""} text-muted-foreground`}>
+              {createdAt.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+            </span>
+          </div>
         </div>
 
         {/* Customer info */}

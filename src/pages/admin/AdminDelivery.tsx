@@ -114,19 +114,12 @@ export default function AdminDelivery() {
   async function fetchData() {
     setLoading(true);
 
-    console.log("=== FETCH DATA START ===");
-    console.log("selectedRestaurantId:", selectedRestaurantId);
-    console.log("selectedRestaurantIds:", selectedRestaurantIds);
-    console.log("ctxRestaurantId:", ctxRestaurantId);
-
     if (!ctxRestaurantId) {
-      console.log("No ctxRestaurantId, cannot fetch data");
       toast({ title: "Nenhum restaurante selecionado", description: "Selecione um restaurante para configurar a entrega", variant: "destructive" });
       setLoading(false);
       return;
     }
 
-    console.log("Fetching restaurant data for ID:", ctxRestaurantId);
     const { data: restaurantData, error: restaurantError } = await supabase
       .from("restaurants")
       .select("id, address, delivery_mode, default_delivery_time_min, default_delivery_fee, restaurant_lat, restaurant_lng, address_cep, address_street, address_number, address_complement, address_neighborhood, address_city, address_state")
@@ -134,7 +127,6 @@ export default function AdminDelivery() {
       .maybeSingle();
 
     if (restaurantError) {
-      console.error("Error loading restaurant data:", restaurantError);
       toast({ title: "Erro ao carregar restaurante", description: restaurantError.message, variant: "destructive" });
       setLoading(false);
       return;
@@ -142,7 +134,6 @@ export default function AdminDelivery() {
 
     if (restaurantData) {
       const r = restaurantData as Restaurant;
-      console.log("Restaurant data loaded:", r);
       setRestaurant(r);
       setDeliveryMode(r.delivery_mode || "zones");
       setDefaultTime(r.default_delivery_time_min?.toString() || "");
@@ -167,7 +158,6 @@ export default function AdminDelivery() {
         setZones(zonesData as DeliveryZone[]);
       }
     } else {
-      console.log("No restaurant data found");
       toast({ title: "Restaurante não encontrado", description: "O restaurante selecionado não existe ou não está disponível", variant: "destructive" });
     }
 
@@ -176,18 +166,23 @@ export default function AdminDelivery() {
 
   async function handleModeChange(mode: "zones" | "radius") {
     if (mode === deliveryMode) return;
-    setDeliveryMode(mode);
     if (!restaurant) return;
+    
+    // Update locally first for better UX
+    const prevMode = deliveryMode;
+    setDeliveryMode(mode);
+    
     const { error } = await supabase
       .from("restaurants")
       .update({ delivery_mode: mode })
       .eq("id", restaurant.id);
+      
     if (error) {
       toast({ title: "Erro ao salvar modo", description: error.message, variant: "destructive" });
-      setDeliveryMode(deliveryMode); // revert
+      setDeliveryMode(prevMode); // revert
     } else {
       toast({ title: mode === "radius" ? "Modo raio ativado!" : "Modo setores/bairros ativado!" });
-      setDeliveryMode(mode);
+      setRestaurant(prev => prev ? { ...prev, delivery_mode: mode } : prev);
     }
   }
 
@@ -298,135 +293,95 @@ export default function AdminDelivery() {
   const bulkCount = editingZone ? 0 : parseBulkNames(zoneName).length;
 
   async function saveZone() {
-    console.log("=== SAVE ZONE START ===");
-    console.log("restaurant:", restaurant);
-    console.log("deliveryMode:", deliveryMode);
-    console.log("zoneName:", zoneName);
-    console.log("zoneFee:", zoneFee);
-    console.log("zoneCity:", zoneCity);
-    console.log("zoneTime:", zoneTime);
-    console.log("zoneMinRadius:", zoneMinRadius);
-    console.log("zoneMaxRadius:", zoneMaxRadius);
-    console.log("editingZone:", editingZone);
-
+    console.log('[DEBUG] saveZone chamada - payload:', { zoneCity, zoneName, zoneFee, zoneTime });
     if (!restaurant) {
-      console.log("No restaurant, returning");
       return;
     }
 
     // Validation differs by mode
     if (deliveryMode === "radius") {
       if (!zoneName || !zoneFee || !zoneMaxRadius) {
-        console.log("Validation failed for radius mode");
         toast({ title: "Preencha nome, raio máximo e taxa", variant: "destructive" });
         return;
       }
     } else {
       if (!zoneName || !zoneFee) {
-        console.log("Validation failed for neighborhood mode");
         toast({ title: "Preencha os campos obrigatórios", variant: "destructive" });
         return;
       }
     }
 
-    console.log("Validation passed, setting saving to true");
     setSaving(true);
 
-    if (deliveryMode === "radius") {
-      // Radius zone save
-      const zoneData = {
-        restaurant_id: restaurant.id,
-        zone_type: "radius" as const,
-        name: zoneName.trim(),
-        city: null,
-        fee: parseFloat(zoneFee),
-        min_radius_km: zoneMinRadius ? parseFloat(zoneMinRadius) : 0,
-        max_radius_km: parseFloat(zoneMaxRadius),
-        estimated_time_min: zoneTime ? parseInt(zoneTime) : null,
-      };
-
-      console.log("Radius zone data:", zoneData);
-
-      if (editingZone) {
-        console.log("Updating existing zone:", editingZone.id);
-        const { error } = await supabase.from("delivery_zones").update(zoneData).eq("id", editingZone.id);
-        if (error) {
-          console.log("Update error:", error);
-          toast({ title: "Erro ao salvar", description: error.message, variant: "destructive" });
-        }
-        else {
-          console.log("Update successful");
-          toast({ title: "Faixa atualizada!" });
-        }
-      } else {
-        console.log("Inserting new zone");
-        const { error } = await supabase.from("delivery_zones").insert(zoneData);
-        if (error) {
-          console.log("Insert error:", error);
-          toast({ title: "Erro ao criar", description: error.message, variant: "destructive" });
-        }
-        else {
-          console.log("Insert successful");
-          toast({ title: "Faixa adicionada!" });
-        }
-      }
-    } else {
-      // Neighborhood zone save
-      if (editingZone) {
+    try {
+      if (deliveryMode === "radius") {
+        // Radius zone save
         const zoneData = {
           restaurant_id: restaurant.id,
-          zone_type: "neighborhood" as const,
+          zone_type: "radius" as const,
           name: zoneName.trim(),
-          city: zoneCity || null,
+          city: null,
           fee: parseFloat(zoneFee),
-          min_radius_km: null,
-          max_radius_km: null,
+          min_radius_km: zoneMinRadius ? parseFloat(zoneMinRadius) : 0,
+          max_radius_km: parseFloat(zoneMaxRadius),
           estimated_time_min: zoneTime ? parseInt(zoneTime) : null,
-          is_active: editingZone.is_active,
         };
 
-        console.log("Neighborhood zone data (edit):", zoneData);
-        const { error } = await supabase.from("delivery_zones").update(zoneData).eq("id", editingZone.id);
-        if (error) {
-          console.log("Update error:", error);
-          toast({ title: "Erro ao salvar zona", description: error.message, variant: "destructive" });
-        }
-        else {
-          console.log("Update successful");
-          toast({ title: "Zona atualizada!" });
+        if (editingZone) {
+          const { error } = await supabase.from("delivery_zones").update(zoneData).eq("id", editingZone.id);
+          if (error) throw error;
+          toast({ title: "Faixa atualizada!" });
+        } else {
+          const { error } = await supabase.from("delivery_zones").insert(zoneData);
+          if (error) throw error;
+          toast({ title: "Faixa adicionada!" });
         }
       } else {
-        const names = parseBulkNames(zoneName);
-        console.log("Parsed neighborhood names:", names);
-        const rows = names.map(name => ({
-          restaurant_id: restaurant.id,
-          zone_type: "neighborhood" as const,
-          name,
-          city: zoneCity || null,
-          fee: parseFloat(zoneFee),
-          min_radius_km: null,
-          max_radius_km: null,
-          estimated_time_min: zoneTime ? parseInt(zoneTime) : null,
-          is_active: true,
-        }));
+        // Neighborhood zone save
+        if (editingZone) {
+          const zoneData = {
+            restaurant_id: restaurant.id,
+            zone_type: "neighborhood" as const,
+            name: zoneName.trim(),
+            city: zoneCity || null,
+            fee: parseFloat(zoneFee),
+            min_radius_km: null,
+            max_radius_km: null,
+            estimated_time_min: zoneTime ? parseInt(zoneTime) : null,
+            is_active: editingZone.is_active,
+          };
 
-        console.log("Neighborhood zone rows to insert:", rows);
-        const { error } = await supabase.from("delivery_zones").insert(rows);
-        if (error) {
-          console.log("Insert error:", error);
-          toast({ title: "Erro ao salvar zonas", description: error.message, variant: "destructive" });
-        }
-        else {
-          console.log("Insert successful");
+          const { error } = await supabase.from("delivery_zones").update(zoneData).eq("id", editingZone.id);
+          if (error) throw error;
+          toast({ title: "Zona atualizada!" });
+        } else {
+          const names = parseBulkNames(zoneName);
+          const rows = names.map(name => ({
+            restaurant_id: restaurant.id,
+            zone_type: "neighborhood" as const,
+            name,
+            city: zoneCity || null,
+            fee: parseFloat(zoneFee),
+            min_radius_km: null,
+            max_radius_km: null,
+            estimated_time_min: zoneTime ? parseInt(zoneTime) : null,
+            is_active: true,
+          }));
+
+          const { error } = await supabase.from("delivery_zones").insert(rows);
+          if (error) throw error;
           toast({ title: `${names.length} ${names.length === 1 ? 'setor/bairro' : 'setores/bairros'} adicionado${names.length === 1 ? '' : 's'}!` });
         }
       }
-    }
 
-    console.log("Setting saving to false and closing dialog");
-    setSaving(false);
-    setDialogOpen(false);
-    fetchData();
+      setDialogOpen(false);
+      fetchData();
+    } catch (error: any) {
+      console.error("Error saving zone:", error);
+      toast({ title: "Erro ao salvar", description: error.message, variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function toggleZoneActive(zone: DeliveryZone) {
@@ -749,6 +704,13 @@ export default function AdminDelivery() {
           bulkDelete={bulkDelete}
           bulkToggleActive={bulkToggleActive}
           setSelectedIds={setSelectedIds}
+          currentFilteredZones={currentFilteredZones}
+          setZoneCity={setZoneCity}
+          setZoneName={setZoneName}
+          setZoneFee={setZoneFee}
+          setZoneTime={setZoneTime}
+          setDialogOpen={setDialogOpen}
+          dialogOpen={dialogOpen}
         />
       )}
 
@@ -763,10 +725,7 @@ export default function AdminDelivery() {
       )}
 
       {/* Create/Edit Dialog — shared */}
-      <Dialog open={dialogOpen} onOpenChange={(open) => {
-        console.log("Dialog onOpenChange", { open, dialogOpen });
-        setDialogOpen(open);
-      }}>
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
@@ -1029,6 +988,13 @@ function NeighborhoodZonesCard({
   bulkDelete,
   bulkToggleActive,
   setSelectedIds,
+  setZoneCity,
+  setZoneName,
+  setZoneFee,
+  setZoneTime,
+  setDialogOpen,
+  dialogOpen,
+  currentFilteredZones,
 }: any) {
   // Group zones by city
   const grouped: Record<string, DeliveryZone[]> = {};
@@ -1143,7 +1109,7 @@ function NeighborhoodZonesCard({
                         className="h-7 text-xs ml-auto"
                         type="button"
                         onClick={(e) => {
-                          console.log("Botão Adicionar Setor/Bairro clicado", { city, dialogOpen });
+                          console.log('[DEBUG] Botão Adicionar Setor clicado', { cidade: city });
                           e.preventDefault();
                           e.stopPropagation();
                           setZoneCity(city === "Sem cidade" ? "" : city);
@@ -1151,7 +1117,6 @@ function NeighborhoodZonesCard({
                           setZoneFee("");
                           setZoneTime("");
                           setDialogOpen(true);
-                          console.log("setDialogOpen(true) chamado");
                         }}
                       >
                         <Plus className="w-3.5 h-3.5 mr-1" />Adicionar Setor/Bairro

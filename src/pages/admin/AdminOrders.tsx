@@ -6,6 +6,7 @@ import { ptBR } from "date-fns/locale";
 import { OrderCountdown } from "@/components/admin/OrderCountdown";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
+import { maskCpfCnpj } from "@/utils/cpfCnpj";
 import {
   Clock,
   ChefHat,
@@ -27,6 +28,7 @@ import {
   DollarSign,
   ExternalLink,
   Calendar,
+  FileText,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -47,9 +49,12 @@ import { useToast } from "@/hooks/use-toast";
 import { Tables } from "@/integrations/supabase/types";
 import { ManualOrderDrawer } from "@/components/admin/ManualOrderDrawer";
 import { KanbanBoard } from "@/components/admin/KanbanBoard";
-import { printOrder } from "@/components/orders/OrderReceipt";
+import { printOrder, printBatchOrders } from "@/components/orders/OrderReceipt";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { playNewOrderSound, NotificationSoundType, setKeepAliveCallback } from "@/lib/notification-sound";
 import { useRestaurantContext } from "@/contexts/RestaurantContext";
+import EmitirNFeButton from "@/components/admin/fiscal/EmitirNFeButton";
+import NFeStatusBadge from "@/components/admin/fiscal/NFeStatusBadge";
 
 type Order = Tables<"orders">;
 
@@ -103,7 +108,17 @@ export default function AdminOrders() {
   const [addonNamesCache, setAddonNamesCache] = useState<Record<string, string>>({});
   const [addonPricesCache, setAddonPricesCache] = useState<Record<string, number>>({});
   const [driversByRestaurant, setDriversByRestaurant] = useState<Record<string, Driver[]>>({});
+  const [selectedOrders, setSelectedOrders] = useState<string[]>([]);
   const { toast } = useToast();
+
+  // Fiscal state
+  const [fiscalConfig, setFiscalConfig] = useState<{
+    is_configured: boolean;
+    is_active: boolean;
+    provider: string;
+    environment: string;
+  } | null>(null);
+  const [fiscalInvoices, setFiscalInvoices] = useState<Record<string, any>>({});
 
   // Derived values
   const restaurantId = selectedRestaurant?.id || (selectedRestaurantIds.length === 1 ? selectedRestaurantIds[0] : null);
@@ -146,12 +161,83 @@ export default function AdminOrders() {
   const activeOrders = orders.filter(o => o.payment_status !== "awaiting_payment");
   const sortedOrders = [...activeOrders].sort((a, b) => new Date(b.created_at || "").getTime() - new Date(a.created_at || "").getTime());
 
+  // Selection handlers for batch printing (delivered tab only)
+  const toggleSelection = (orderId: string) => {
+    setSelectedOrders(prev =>
+      prev.includes(orderId) ? prev.filter(id => id !== orderId) : [...prev, orderId]
+    );
+  };
+
+  const selectTodayOrders = () => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayOrders = sortedOrders
+      .filter(o => o.status === "delivered" && new Date(o.created_at || "") >= today)
+      .map(o => o.id);
+    setSelectedOrders(todayOrders);
+  };
+
+  const clearSelection = () => {
+    setSelectedOrders([]);
+  };
+
+  const handleBatchPrint = () => {
+    const selectedOrdersData = sortedOrders.filter(o => selectedOrders.includes(o.id));
+    if (selectedOrdersData.length === 0) return;
+    printBatchOrders(selectedOrdersData, restaurantName, addonNamesCache, addonPricesCache);
+  };
+
   // Set notification sound from selected restaurant
   useEffect(() => {
     if (selectedRestaurant?.notification_sound) {
       setNotificationSound(selectedRestaurant.notification_sound as NotificationSoundType);
     }
   }, [selectedRestaurant]);
+
+  // Load fiscal config
+  useEffect(() => {
+    const loadFiscalConfig = async () => {
+      if (!restaurantId) return;
+
+      const { data } = await supabase
+        .from("fiscal_config")
+        .select("is_configured, is_active, provider, environment")
+        .eq("restaurant_id", restaurantId)
+        .maybeSingle();
+
+      if (data) {
+        setFiscalConfig(data);
+        console.log("[FISCAL] Config carregada:", data);
+      }
+    };
+
+    loadFiscalConfig();
+  }, [restaurantId]);
+
+  // Load fiscal invoices
+  const loadFiscalInvoices = async (orderIds: string[]) => {
+    if (!orderIds.length || !restaurantId) return;
+
+    const { data } = await supabase
+      .from("fiscal_invoices")
+      .select("*")
+      .in("order_id", orderIds)
+      .eq("restaurant_id", restaurantId);
+
+    if (data) {
+      const map: Record<string, any> = {};
+      data.forEach((inv) => {
+        map[inv.order_id] = inv;
+      });
+      setFiscalInvoices(map);
+      console.log("[FISCAL] Invoices encontradas:", map);
+    }
+  };
+
+  // Handle invoice update
+  const handleInvoiceUpdate = (orderId: string, invoice: any) => {
+    setFiscalInvoices((prev) => ({ ...prev, [orderId]: invoice }));
+  };
 
   // Fetch active drivers for currently visible restaurants and group by restaurant
   useEffect(() => {
@@ -198,6 +284,12 @@ export default function AdminOrders() {
       if (error) { toast({ title: "Erro ao carregar pedidos", description: error.message, variant: "destructive" }); return; }
       setOrders(data || []);
       setLoading(false);
+
+      // Load fiscal invoices after orders are loaded
+      if (data && data.length > 0) {
+        const orderIds = data.map(o => o.id);
+        loadFiscalInvoices(orderIds);
+      }
     }
     fetchOrders();
 
@@ -440,6 +532,37 @@ export default function AdminOrders() {
           <p className="text-sm text-muted-foreground">{orders.length} pedidos recebidos hoje</p>
         </div>
         <div className="flex items-center gap-2 sm:gap-3">
+          <TooltipProvider>
+            <Tooltip delayDuration={300}>
+              <TooltipTrigger asChild>
+                <span tabIndex={0}>
+                  <Button
+                    variant="default"
+                    size="sm"
+                    disabled={selectedOrders.length === 0}
+                    onClick={() => { console.log("[NFE BATCH] orders:", selectedOrders.length, selectedOrders); alert("Emissão em lote em desenvolvimento"); }}
+                    className="gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <FileText className="w-4 h-4" />
+                    {selectedOrders.length === 0 ? "Emitir NFe" : `Emitir ${selectedOrders.length} ${selectedOrders.length === 1 ? "nota" : "notas"}`}
+                  </Button>
+                </span>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="max-w-xs">
+                {selectedOrders.length === 0 ? (
+                  <div className="text-sm">
+                    <p className="font-semibold mb-2">📋 Como emitir nota fiscal:</p>
+                    <p className="mb-1">1. Vá para a aba 'Entregue'</p>
+                    <p className="mb-1">2. Selecione os pedidos desejados</p>
+                    <p className="mb-2">3. Clique aqui para emitir as notas</p>
+                    <p className="text-muted-foreground text-xs">Você também pode emitir uma nota individual clicando em um pedido específico.</p>
+                  </div>
+                ) : (
+                  <p className="text-sm">Emitir nota fiscal para os {selectedOrders.length} pedidos selecionados</p>
+                )}
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
           <div className="flex items-center gap-2 text-sm">
             <Printer className="w-4 h-4 text-muted-foreground" />
             <span className="text-muted-foreground hidden sm:inline">Auto-imprimir</span>
@@ -486,6 +609,15 @@ export default function AdminOrders() {
           drivers={driversByRestaurant[selectedRestaurant?.id || ""] || []}
           restaurantName={restaurantName}
           deliveryTimeMin={selectedRestaurant?.default_delivery_time_min}
+          selectedOrders={selectedOrders}
+          onToggleSelection={toggleSelection}
+          onSelectTodayOrders={selectTodayOrders}
+          onClearSelection={clearSelection}
+          onBatchPrint={handleBatchPrint}
+          fiscalConfig={fiscalConfig}
+          fiscalInvoices={fiscalInvoices}
+          restaurantId={restaurantId}
+          onInvoiceUpdate={handleInvoiceUpdate}
         />
       )}
 
@@ -604,6 +736,12 @@ function OrderDetailDialog({ order, onChangeStatus, onCancelOrder, onPrint, form
           <Phone className="w-4 h-4 flex-shrink-0" />
           <a href={`tel:${order.customer_phone}`} className="hover:underline">{order.customer_phone}</a>
         </div>
+        {(order as any).cpf_cnpj_nota && (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <FileText className="w-4 h-4 flex-shrink-0" />
+            <span>CPF na nota: {maskCpfCnpj((order as any).cpf_cnpj_nota)}</span>
+          </div>
+        )}
         {order.delivery_type === "delivery" && order.customer_address && (
           <div className="flex items-start gap-2 text-sm text-muted-foreground">
             <MapPin className="w-4 h-4 flex-shrink-0 mt-0.5" />
@@ -622,28 +760,56 @@ function OrderDetailDialog({ order, onChangeStatus, onCancelOrder, onPrint, form
                 <span>{item.quantity}x {item.name}</span>
                 <span className="text-muted-foreground ml-2 flex-shrink-0">{formatCurrency(item.price * item.quantity)}</span>
               </div>
-              {/* Addons - handle both formats */}
+              {/* Addons - handle all formats with retrocompatibility */}
               {item.addons && (() => {
-                // New format: Record<groupId, addonItemId[]> + addonNames map
+                // New format with quantity: Record<groupId, Record<addonItemId, quantity>>
                 if (!Array.isArray(item.addons)) {
-                  const allAddonIds = Object.values(item.addons).flat();
-                  if (allAddonIds.length === 0) return null;
-                  return (
-                    <div className="ml-4 mt-0.5">
-                      {allAddonIds.map((addonId, aIdx) => {
-                        const addonName = item.addonNames?.[addonId] || addonNamesCache[addonId] || addonId;
-                        const addonPrice = addonPricesCache[addonId];
-                        const qty = item.quantity;
-                        const qtyPrefix = qty > 1 ? `${qty}x ` : "";
-                        return (
-                          <div key={aIdx} className="flex justify-between text-xs text-muted-foreground">
-                            <span>+ {qtyPrefix}{addonName}</span>
-                            {addonPrice != null && addonPrice > 0 && <span>{formatCurrency(addonPrice * qty)}</span>}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  );
+                  // Check if it's the new quantity format (object with numbers) or old ID format (array of strings)
+                  const firstGroup = Object.values(item.addons)[0];
+                  if (firstGroup && typeof firstGroup === 'object' && !Array.isArray(firstGroup)) {
+                    // New quantity format: { "uuid1": 2, "uuid2": 1 }
+                    const allAddons = Object.entries(item.addons).flatMap(([_, addonQtyMap]) =>
+                      Object.entries(addonQtyMap).map(([addonId, qty]) => ({ addonId, qty }))
+                    ).filter(({ qty }) => qty > 0);
+
+                    if (allAddons.length === 0) return null;
+                    return (
+                      <div className="ml-4 mt-0.5">
+                        {allAddons.map(({ addonId, qty }) => {
+                          const addonName = item.addonNames?.[addonId] || addonNamesCache[addonId] || addonId;
+                          const addonPrice = addonPricesCache[addonId];
+                          const totalQty = qty * item.quantity;
+                          const qtyPrefix = totalQty > 1 ? `${totalQty}x ` : "";
+                          return (
+                            <div key={addonId} className="flex justify-between text-xs text-muted-foreground">
+                              <span>+ {qtyPrefix}{addonName}</span>
+                              {addonPrice != null && addonPrice > 0 && <span>{formatCurrency(addonPrice * totalQty)}</span>}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  } else {
+                    // Old ID format: { "group1": ["uuid1", "uuid2"] }
+                    const allAddonIds = Object.values(item.addons).flat();
+                    if (allAddonIds.length === 0) return null;
+                    return (
+                      <div className="ml-4 mt-0.5">
+                        {allAddonIds.map((addonId, aIdx) => {
+                          const addonName = item.addonNames?.[addonId] || addonNamesCache[addonId] || addonId;
+                          const addonPrice = addonPricesCache[addonId];
+                          const qty = item.quantity;
+                          const qtyPrefix = qty > 1 ? `${qty}x ` : "";
+                          return (
+                            <div key={aIdx} className="flex justify-between text-xs text-muted-foreground">
+                              <span>+ {qtyPrefix}{addonName}</span>
+                              {addonPrice != null && addonPrice > 0 && <span>{formatCurrency(addonPrice * qty)}</span>}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  }
                 }
                 // Legacy format: Array<{ groupName, items }>
                 return item.addons.map((group: any, gIdx: number) => (
@@ -711,6 +877,9 @@ function OrderDetailDialog({ order, onChangeStatus, onCancelOrder, onPrint, form
             <div className="flex gap-1">
               <Button variant="outline" size="sm" className="h-8 w-8 p-0" onClick={onPrint}>
                 <Printer className="w-4 h-4" />
+              </Button>
+              <Button variant="outline" size="sm" className="h-8 w-8 p-0" onClick={() => { console.log("[NFE] Emitir pedido:", order.id); alert("Emissão NFe em desenvolvimento"); }}>
+                <FileText className="w-4 h-4" />
               </Button>
             </div>
           </div>

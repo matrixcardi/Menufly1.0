@@ -7,8 +7,8 @@ import { CategoryTabs } from "@/components/menu/CategoryTabs";
 import { PopularSection } from "@/components/menu/PopularSection";
 import { ProductList } from "@/components/menu/ProductList";
 import { BottomNav } from "@/components/menu/BottomNav";
-import type { SelectedAddons } from "@/components/menu/ProductDrawer";
 import { useCart } from "@/contexts/CartContext";
+import type { SelectedAddons } from "@/contexts/CartContext";
 import { useRestaurantBySlug, Product } from "@/hooks/useRestaurantBySlug";
 import { Skeleton } from "@/components/ui/skeleton";
 

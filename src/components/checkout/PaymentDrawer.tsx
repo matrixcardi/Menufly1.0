@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, CreditCard, Banknote, QrCode, Loader2 } from "lucide-react";
+import { ArrowLeft, CreditCard, Banknote, QrCode, Loader2, FileText } from "lucide-react";
 import {
   Drawer,
   DrawerContent,
@@ -10,6 +10,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
 import { useCart } from "@/contexts/CartContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -18,6 +19,7 @@ import { trackPurchase, trackAddPaymentInfo } from "@/lib/meta-pixel";
 import { PixPaymentDrawer } from "./PixPaymentDrawer";
 import { CardPaymentDrawer } from "./CardPaymentDrawer";
 import { translateError } from "@/lib/error-messages";
+import { maskCpfCnpj, validateCpfCnpj } from "@/utils/cpfCnpj";
 
 interface PaymentDrawerProps {
   open: boolean;
@@ -65,7 +67,12 @@ export function PaymentDrawer({
   const [cardEnabled, setCardEnabled] = useState(true);
   const [cardOnlineEnabled, setCardOnlineEnabled] = useState(false);
   const [mpPublicKey, setMpPublicKey] = useState<string | null>(null);
-  
+
+  // CPF/CNPJ na nota state
+  const [incluirCpf, setIncluirCpf] = useState(false);
+  const [cpfCnpj, setCpfCnpj] = useState('');
+  const [erroCpfCnpj, setErroCpfCnpj] = useState('');
+
   // PIX flow state
   const [showPixDrawer, setShowPixDrawer] = useState(false);
   const [pixOrderId, setPixOrderId] = useState<string | null>(null);
@@ -105,6 +112,15 @@ export function PaymentDrawer({
   };
 
   const handleSubmit = async () => {
+    // Validate CPF/CNPJ if toggle is enabled
+    if (incluirCpf && cpfCnpj) {
+      if (!validateCpfCnpj(cpfCnpj)) {
+        setErroCpfCnpj('CPF/CNPJ inválido');
+        return;
+      }
+      setErroCpfCnpj('');
+    }
+
     const isPix = selectedMethod === "pix";
     const isCardOnline = selectedMethod === "card_online";
     const paymentMethod = isPix || isCardOnline ? "pix" : selectedMethod === "cash" ? "cash" : "card";
@@ -161,15 +177,17 @@ export function PaymentDrawer({
         p_delivery_fee: deliveryMethod === "delivery" ? deliveryFee : 0,
         p_scheduled_at: scheduledAt || null,
         p_scheduling_type: schedulingType || null,
+        p_cpf_cnpj_nota: incluirCpf ? cpfCnpj : null,
       };
 
       const { data, error } = await supabase.rpc('submit_order', rpcParams);
 
       if (error) {
-        logger.error("Error submitting order:", error);
+        logger.error("[PEDIDO] Erro ao enviar pedido:", error);
+        console.error('[PEDIDO] Detalhes do erro:', error);
         const translatedError = translateError(error);
         toast.error("Erro ao enviar pedido", {
-          description: translatedError,
+          description: translatedError || error.message || 'Algo deu errado',
         });
         return;
       }
@@ -292,6 +310,9 @@ export function PaymentDrawer({
     if (!open) {
       setSelectedMethod(null);
       setCashChange("");
+      setIncluirCpf(false);
+      setCpfCnpj('');
+      setErroCpfCnpj('');
     }
   }, [open]);
 
@@ -445,6 +466,55 @@ export function PaymentDrawer({
               <span>Total</span>
               <span>{formatCurrency(deliveryMethod === "pickup" || hasFreeShipping ? total : total + deliveryFee)}</span>
             </div>
+          </div>
+
+          {/* CPF/CNPJ na nota */}
+          <div className="space-y-3 pt-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <FileText className="w-4 h-4 text-muted-foreground" />
+                <Label htmlFor="cpf-toggle" className="text-sm font-medium cursor-pointer">
+                  CPF/CNPJ na nota?
+                </Label>
+              </div>
+              <Switch
+                id="cpf-toggle"
+                checked={incluirCpf}
+                onCheckedChange={(checked) => {
+                  setIncluirCpf(checked);
+                  if (!checked) {
+                    setCpfCnpj('');
+                    setErroCpfCnpj('');
+                  }
+                }}
+                disabled={isSubmitting}
+              />
+            </div>
+            {incluirCpf && (
+              <div className="space-y-2 animate-in slide-down-from-top-2 duration-200">
+                <Label htmlFor="cpf-input" className="text-sm font-medium">
+                  CPF ou CNPJ
+                </Label>
+                <Input
+                  id="cpf-input"
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="000.000.000-00"
+                  value={cpfCnpj}
+                  onChange={(e) => {
+                    const masked = maskCpfCnpj(e.target.value);
+                    setCpfCnpj(masked);
+                    if (erroCpfCnpj) setErroCpfCnpj('');
+                  }}
+                  className="h-12 text-base"
+                  disabled={isSubmitting}
+                  autoFocus
+                />
+                {erroCpfCnpj && (
+                  <p className="text-xs text-destructive">{erroCpfCnpj}</p>
+                )}
+              </div>
+            )}
           </div>
         </div>
 

@@ -25,7 +25,7 @@ interface ProductDrawerProps {
   restaurantId?: string;
 }
 
-export type SelectedAddons = Record<string, string[]>;
+export type SelectedAddons = Record<string, Record<string, number>>;
 
 export function ProductDrawer({ product, open, onOpenChange, onAddToCart, onOpenCart, restaurantId }: ProductDrawerProps) {
   const [quantity, setQuantity] = useState(1);
@@ -46,10 +46,10 @@ export function ProductDrawer({ product, open, onOpenChange, onAddToCart, onOpen
   const addonsTotal = useMemo(() => {
     let total = 0;
     addonSections.forEach((section) => {
-      const selected = selectedAddons[section.id] || [];
-      selected.forEach((itemId) => {
+      const selected = selectedAddons[section.id] || {};
+      Object.entries(selected).forEach(([itemId, qty]) => {
         const item = section.items.find((i) => i.id === itemId);
-        if (item) total += item.price;
+        if (item && qty > 0) total += item.price * qty;
       });
     });
     return total;
@@ -60,41 +60,49 @@ export function ProductDrawer({ product, open, onOpenChange, onAddToCart, onOpen
     return (product.price + addonsTotal) * quantity;
   }, [product, addonsTotal, quantity]);
 
-  const handleAddonToggle = (sectionId: string, itemId: string, section: AddonGroupWithItems) => {
+  const handleAddonToggle = (sectionId: string, itemId: string, section: AddonGroupWithItems, delta: number = 1) => {
     setSelectedAddons((prev) => {
-      const current = prev[sectionId] || [];
+      const current = prev[sectionId] || {};
+
+      // Calculate total quantity in this group
+      const totalQty = Object.values(current).reduce((sum, qty) => sum + qty, 0);
 
       if (section.type === "single") {
         // Radio behavior - toggle off if already selected
-        if (current.includes(itemId)) {
-          return { ...prev, [sectionId]: [] };
+        if (current[itemId] && current[itemId] > 0) {
+          return { ...prev, [sectionId]: {} };
         }
-        return { ...prev, [sectionId]: [itemId] };
+        return { ...prev, [sectionId]: { [itemId]: 1 } };
       }
 
-      // Checkbox behavior
-      if (current.includes(itemId)) {
-        return { ...prev, [sectionId]: current.filter((id) => id !== itemId) };
+      // Checkbox behavior with quantity
+      const newQty = (current[itemId] || 0) + delta;
+
+      if (newQty <= 0) {
+        // Remove item if quantity goes to 0
+        const { [itemId]: _, ...rest } = current;
+        return { ...prev, [sectionId]: rest };
       }
 
-      // Check maxSelect (null, undefined, or 0 means unlimited)
-      if (section.max_select && section.max_select > 0 && current.length >= section.max_select) {
+      // Check maxSelect (rule B: sum of quantities)
+      if (section.max_select && section.max_select > 0 && totalQty + delta > section.max_select) {
         toast.error(`Máximo de ${section.max_select} opções neste grupo`);
         return prev;
       }
 
-      return { ...prev, [sectionId]: [...current, itemId] };
+      return { ...prev, [sectionId]: { ...current, [itemId]: newQty } };
     });
   };
 
   const handleAddToCart = () => {
     // Validate required addon groups and min_select
     for (const section of addonSections) {
-      const selected = selectedAddons[section.id] || [];
+      const selected = selectedAddons[section.id] || {};
+      const totalQty = Object.values(selected).reduce((sum, qty) => sum + qty, 0);
       const min = section.min_select && section.min_select > 0
         ? section.min_select
         : (section.required ? 1 : 0);
-      if (min > 0 && selected.length < min) {
+      if (min > 0 && totalQty < min) {
         toast.error(
           min === 1
             ? `Selecione uma opção em "${section.name}"`
@@ -108,12 +116,15 @@ export function ProductDrawer({ product, open, onOpenChange, onAddToCart, onOpen
       // Build addon names map from current addon sections
       const addonNamesMap: Record<string, string> = {};
       addonSections.forEach((section) => {
-        const selected = selectedAddons[section.id] || [];
-        selected.forEach((itemId) => {
-          const item = section.items.find((i) => i.id === itemId);
-          if (item) addonNamesMap[itemId] = item.name;
+        const selected = selectedAddons[section.id] || {};
+        Object.entries(selected).forEach(([itemId, qty]) => {
+          if (qty > 0) {
+            const item = section.items.find((i) => i.id === itemId);
+            if (item) addonNamesMap[itemId] = item.name;
+          }
         });
       });
+      console.log('[PEDIDO] addons:', selectedAddons);
       onAddToCart(product, quantity, selectedAddons, addonsTotal, notes.trim() || undefined, addonNamesMap);
     }
     // Reset state
@@ -173,8 +184,8 @@ export function ProductDrawer({ product, open, onOpenChange, onAddToCart, onOpen
                 <AddonSectionComponent
                   key={section.id}
                   section={section}
-                  selectedItems={selectedAddons[section.id] || []}
-                  onToggle={(itemId) => handleAddonToggle(section.id, itemId, section)}
+                  selectedItems={selectedAddons[section.id] || {}}
+                  onToggle={(itemId, delta) => handleAddonToggle(section.id, itemId, section, delta)}
                 />
               ))}
 
@@ -231,13 +242,17 @@ export function ProductDrawer({ product, open, onOpenChange, onAddToCart, onOpen
 
 interface AddonSectionComponentProps {
   section: AddonGroupWithItems;
-  selectedItems: string[];
-  onToggle: (itemId: string) => void;
+  selectedItems: Record<string, number>;
+  onToggle: (itemId: string, delta: number) => void;
 }
 
 function AddonSectionComponent({ section, selectedItems, onToggle }: AddonSectionComponentProps) {
-  const formatPrice = (price: number) => 
+  const formatPrice = (price: number) =>
     price === 0 ? "Grátis" : `+ R$ ${price.toFixed(2).replace(".", ",")}`;
+
+  // Calculate total quantity in this group for max_select validation
+  const totalQty = Object.values(selectedItems).reduce((sum, qty) => sum + qty, 0);
+  const isMaxReached = section.max_select && section.max_select > 0 && totalQty >= section.max_select;
 
   return (
     <div className="bg-secondary/50 rounded-xl p-4">
@@ -262,8 +277,8 @@ function AddonSectionComponent({ section, selectedItems, onToggle }: AddonSectio
 
       {section.type === "single" ? (
         <RadioGroup
-          value={selectedItems[0] || ""}
-          onValueChange={(value) => onToggle(value)}
+          value={Object.keys(selectedItems).find(id => selectedItems[id] > 0) || ""}
+          onValueChange={(value) => onToggle(value, 1)}
           className="space-y-2"
         >
           {section.items.map((item) => (
@@ -271,7 +286,7 @@ function AddonSectionComponent({ section, selectedItems, onToggle }: AddonSectio
               key={item.id}
               className={cn(
                 "flex items-center justify-between p-3 rounded-lg bg-card cursor-pointer transition-all",
-                selectedItems.includes(item.id) && "ring-2 ring-primary"
+                selectedItems[item.id] > 0 && "ring-2 ring-primary"
               )}
             >
               <div className="flex items-center gap-3">
@@ -291,32 +306,72 @@ function AddonSectionComponent({ section, selectedItems, onToggle }: AddonSectio
         </RadioGroup>
       ) : (
         <div className="space-y-2">
-          {section.items.map((item) => (
-            <label
-              key={item.id}
-              className={cn(
-                "flex items-center justify-between p-3 rounded-lg bg-card cursor-pointer transition-all",
-                selectedItems.includes(item.id) && "ring-2 ring-primary"
-              )}
-            >
-              <div className="flex items-center gap-3">
-                <Checkbox
-                  checked={selectedItems.includes(item.id)}
-                  onCheckedChange={() => onToggle(item.id)}
-                  className="border-primary data-[state=checked]:bg-primary"
-                />
-                <div>
-                  <span className="font-medium text-sm">{item.name}</span>
-                  {item.description && (
-                    <p className="text-xs text-muted-foreground">{item.description}</p>
+          {section.items.map((item) => {
+            const qty = selectedItems[item.id] || 0;
+            const isSelected = qty > 0;
+
+            return (
+              <div
+                key={item.id}
+                className={cn(
+                  "flex items-center justify-between p-3 rounded-lg bg-card transition-all",
+                  isSelected && "ring-2 ring-primary"
+                )}
+              >
+                <div className="flex items-center gap-3 flex-1">
+                  <div
+                    className="cursor-pointer"
+                    onClick={() => onToggle(item.id, 1)}
+                  >
+                    <Checkbox
+                      checked={isSelected}
+                      className="border-primary data-[state=checked]:bg-primary"
+                    />
+                  </div>
+                  <div
+                    className="flex-1 cursor-pointer"
+                    onClick={() => onToggle(item.id, 1)}
+                  >
+                    <span className="font-medium text-sm">{item.name}</span>
+                    {item.description && (
+                      <p className="text-xs text-muted-foreground">{item.description}</p>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="text-sm font-semibold text-primary">
+                    {formatPrice(item.price)}
+                  </span>
+                  {isSelected ? (
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => onToggle(item.id, -1)}
+                        className="w-7 h-7 rounded-lg bg-secondary hover:bg-muted flex items-center justify-center transition-colors"
+                      >
+                        <Minus className="w-4 h-4" />
+                      </button>
+                      <span className="w-6 text-center font-semibold text-sm">{qty}</span>
+                      <button
+                        onClick={() => onToggle(item.id, 1)}
+                        className="w-7 h-7 rounded-lg bg-secondary hover:bg-muted flex items-center justify-center transition-colors"
+                        disabled={isMaxReached}
+                      >
+                        <Plus className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => onToggle(item.id, 1)}
+                      className="w-7 h-7 rounded-lg bg-secondary hover:bg-muted flex items-center justify-center transition-colors"
+                      disabled={isMaxReached}
+                    >
+                      <Plus className="w-4 h-4" />
+                    </button>
                   )}
                 </div>
               </div>
-              <span className="text-sm font-semibold text-primary">
-                {formatPrice(item.price)}
-              </span>
-            </label>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

@@ -65,6 +65,7 @@ const AdminAgendaDia = lazy(() => import("./pages/admin/AdminAgendaDia"));
 const AdminPDV = lazy(() => import("./pages/admin/AdminPDV"));
 const AdminPDVMesas = lazy(() => import("./pages/admin/AdminPDVMesas"));
 const AdminSalao = lazy(() => import("./pages/admin/AdminSalao"));
+const FiscalConfig = lazy(() => import("./pages/admin/FiscalConfig"));
 
 const queryClient = new QueryClient();
 
@@ -156,6 +157,7 @@ const App = () => (
                 <Route path="integracoes" element={<AdminIntegrations />} />
                 <Route path="assinatura" element={<AdminSubscription />} />
                 <Route path="agendamento" element={<AdminAgendamento />} />
+                <Route path="configuracoes/fiscal" element={<FiscalConfig />} />
               </Route>
               
               {/* Master Panel */}
