@@ -1,5 +1,6 @@
 import { Badge } from "@/components/ui/badge";
 import { Loader2, CheckCircle, XCircle, AlertCircle, Clock } from "lucide-react";
+import { usePlan } from "@/hooks/usePlan";
 
 interface NFeStatusBadgeProps {
   status: 'pending' | 'processing' | 'authorized' | 'cancelled' | 'error';
@@ -7,6 +8,10 @@ interface NFeStatusBadgeProps {
 }
 
 export default function NFeStatusBadge({ status, nfeNumber }: NFeStatusBadgeProps) {
+  const { hasFeature } = usePlan();
+
+  // Cliente sem feature NFe não vê badges
+  if (!hasFeature('nfe')) return null;
   switch (status) {
     case 'pending':
       return (

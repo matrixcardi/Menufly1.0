@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useRestaurantContext } from "@/contexts/RestaurantContext";
 import { supabase } from "@/integrations/supabase/client";
-import { geocodeCep } from "@/lib/geocoding";
+// import { geocodeCep } from "@/lib/geocoding"; // Removed - geolocation disabled
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Trash2, MapPin, Clock, Save, Loader2, Pencil, Radar, Map } from "lucide-react";
+import { Plus, Trash2, MapPin, Clock, Save, Loader2, Pencil, Map } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Table,
@@ -70,22 +70,21 @@ export default function AdminDelivery() {
   const [zones, setZones] = useState<DeliveryZone[]>([]);
   
   const [defaultTime, setDefaultTime] = useState<string>("");
-  const [defaultFee, setDefaultFee] = useState<string>("");
-  const [deliveryMode, setDeliveryMode] = useState<"zones" | "radius">("zones");
+  const [deliveryMode] = useState<"zones" | "radius">("zones"); // Always zones - geolocation removed
   const [dialogOpen, setDialogOpen] = useState(false);
 
-  // Address fields for radius mode
-  const [addrCep, setAddrCep] = useState("");
-  const [addrStreet, setAddrStreet] = useState("");
-  const [addrNumber, setAddrNumber] = useState("");
-  const [addrComplement, setAddrComplement] = useState("");
-  const [addrNeighborhood, setAddrNeighborhood] = useState("");
-  const [addrCity, setAddrCity] = useState("");
-  const [addrState, setAddrState] = useState("");
-  const [gpsLat, setGpsLat] = useState("");
-  const [gpsLng, setGpsLng] = useState("");
-  const [geocoding, setGeocoding] = useState(false);
-  const [savingAddress, setSavingAddress] = useState(false);
+  // Address fields for radius mode - REMOVED (geolocation feature disabled)
+  // const [addrCep, setAddrCep] = useState("");
+  // const [addrStreet, setAddrStreet] = useState("");
+  // const [addrNumber, setAddrNumber] = useState("");
+  // const [addrComplement, setAddrComplement] = useState("");
+  // const [addrNeighborhood, setAddrNeighborhood] = useState("");
+  // const [addrCity, setAddrCity] = useState("");
+  // const [addrState, setAddrState] = useState("");
+  // const [gpsLat, setGpsLat] = useState("");
+  // const [gpsLng, setGpsLng] = useState("");
+  // const [geocoding, setGeocoding] = useState(false);
+  // const [savingAddress, setSavingAddress] = useState(false);
   const [editingZone, setEditingZone] = useState<DeliveryZone | null>(null);
   const [editingCity, setEditingCity] = useState<string | null>(null);
   const [newCityName, setNewCityName] = useState("");
@@ -101,8 +100,8 @@ export default function AdminDelivery() {
   const [zoneCity, setZoneCity] = useState("");
   const [zoneName, setZoneName] = useState("");
   const [zoneFee, setZoneFee] = useState("");
-  const [zoneMinRadius, setZoneMinRadius] = useState("");
-  const [zoneMaxRadius, setZoneMaxRadius] = useState("");
+  // const [zoneMinRadius, setZoneMinRadius] = useState(""); // Removed - geolocation disabled
+  // const [zoneMaxRadius, setZoneMaxRadius] = useState(""); // Removed - geolocation disabled
   const [zoneTime, setZoneTime] = useState("");
   
   const { toast } = useToast();
@@ -135,18 +134,22 @@ export default function AdminDelivery() {
     if (restaurantData) {
       const r = restaurantData as Restaurant;
       setRestaurant(r);
-      setDeliveryMode(r.delivery_mode || "zones");
+      // Force delivery_mode to zones - geolocation removed
+      if (r.delivery_mode === "radius") {
+        // Update to zones if currently radius
+        supabase.from("restaurants").update({ delivery_mode: "zones" }).eq("id", r.id);
+      }
       setDefaultTime(r.default_delivery_time_min?.toString() || "");
-      setDefaultFee(r.default_delivery_fee?.toString() || "0");
-      setAddrCep(r.address_cep || "");
-      setAddrStreet(r.address_street || "");
-      setAddrNumber(r.address_number || "");
-      setAddrComplement(r.address_complement || "");
-      setAddrNeighborhood(r.address_neighborhood || "");
-      setAddrCity(r.address_city || "");
-      setAddrState(r.address_state || "");
-      setGpsLat(r.restaurant_lat?.toString() || "");
-      setGpsLng(r.restaurant_lng?.toString() || "");
+      // Address fields removed - geolocation disabled
+      // setAddrCep(r.address_cep || "");
+      // setAddrStreet(r.address_street || "");
+      // setAddrNumber(r.address_number || "");
+      // setAddrComplement(r.address_complement || "");
+      // setAddrNeighborhood(r.address_neighborhood || "");
+      // setAddrCity(r.address_city || "");
+      // setAddrState(r.address_state || "");
+      // setGpsLat(r.restaurant_lat?.toString() || "");
+      // setGpsLng(r.restaurant_lng?.toString() || "");
 
       const { data: zonesData } = await supabase
         .from("delivery_zones")
@@ -164,27 +167,28 @@ export default function AdminDelivery() {
     setLoading(false);
   }
 
-  async function handleModeChange(mode: "zones" | "radius") {
-    if (mode === deliveryMode) return;
-    if (!restaurant) return;
-    
-    // Update locally first for better UX
-    const prevMode = deliveryMode;
-    setDeliveryMode(mode);
-    
-    const { error } = await supabase
-      .from("restaurants")
-      .update({ delivery_mode: mode })
-      .eq("id", restaurant.id);
-      
-    if (error) {
-      toast({ title: "Erro ao salvar modo", description: error.message, variant: "destructive" });
-      setDeliveryMode(prevMode); // revert
-    } else {
-      toast({ title: mode === "radius" ? "Modo raio ativado!" : "Modo setores/bairros ativado!" });
-      setRestaurant(prev => prev ? { ...prev, delivery_mode: mode } : prev);
-    }
-  }
+  // handleModeChange removed - geolocation feature disabled, always zones
+  // async function handleModeChange(mode: "zones" | "radius") {
+  //   if (mode === deliveryMode) return;
+  //   if (!restaurant) return;
+  //   
+  //   // Update locally first for better UX
+  //   const prevMode = deliveryMode;
+  //   setDeliveryMode(mode);
+  //   
+  //   const { error } = await supabase
+  //     .from("restaurants")
+  //     .update({ delivery_mode: mode })
+  //     .eq("id", restaurant.id);
+  //       
+  //   if (error) {
+  //     toast({ title: "Erro ao salvar modo", description: error.message, variant: "destructive" });
+  //     setDeliveryMode(prevMode); // revert
+  //   } else {
+  //     toast({ title: mode === "radius" ? "Modo raio ativado!" : "Modo setores/bairros ativado!" });
+  //     setRestaurant(prev => prev ? { ...prev, delivery_mode: mode } : prev);
+  //   }
+  // }
 
   async function saveSettings() {
     if (!restaurant) return;
@@ -193,9 +197,8 @@ export default function AdminDelivery() {
     const { error } = await supabase
       .from("restaurants")
       .update({
-        delivery_mode: deliveryMode,
+        delivery_mode: "zones", // Always zones - geolocation removed
         default_delivery_time_min: defaultTime ? parseInt(defaultTime) : null,
-        default_delivery_fee: defaultFee ? parseFloat(defaultFee) : 0,
       })
       .eq("id", restaurant.id);
 
@@ -205,72 +208,72 @@ export default function AdminDelivery() {
       toast({ title: "Erro ao salvar", description: error.message, variant: "destructive" });
     } else {
       toast({ title: "Configurações salvas!" });
-      setRestaurant(prev => prev ? { ...prev, delivery_mode: deliveryMode } : prev);
     }
   }
 
-  async function handleCepLookup() {
-    const cleanCep = addrCep.replace(/\D/g, "");
-    if (cleanCep.length !== 8) return;
-    setGeocoding(true);
-    try {
-      const viaCepRes = await fetch(`https://viacep.com.br/ws/${cleanCep}/json/`);
-      const viaCepData = await viaCepRes.json();
-      if (!viaCepData.erro) {
-        setAddrStreet(viaCepData.logradouro || "");
-        setAddrNeighborhood(viaCepData.bairro || "");
-        setAddrCity(viaCepData.localidade || "");
-        setAddrState(viaCepData.uf || "");
-      }
-      const geoResult = await geocodeCep(cleanCep);
-      if (geoResult.success && geoResult.coordinates) {
-        setGpsLat(geoResult.coordinates.lat.toString());
-        setGpsLng(geoResult.coordinates.lng.toString());
-        toast({ title: "Coordenadas encontradas!" });
-      } else {
-        toast({ title: "CEP encontrado, mas não foi possível obter coordenadas", description: "Insira latitude e longitude manualmente.", variant: "destructive" });
-      }
-    } catch {
-      toast({ title: "Erro ao buscar CEP", variant: "destructive" });
-    }
-    setGeocoding(false);
-  }
+  // handleCepLookup and saveAddress removed - geolocation feature disabled
+  // async function handleCepLookup() {
+  //   const cleanCep = addrCep.replace(/\D/g, "");
+  //   if (cleanCep.length !== 8) return;
+  //   setGeocoding(true);
+  //   try {
+  //     const viaCepRes = await fetch(`https://viacep.com.br/ws/${cleanCep}/json/`);
+  //     const viaCepData = await viaCepRes.json();
+  //     if (!viaCepData.erro) {
+  //       setAddrStreet(viaCepData.logradouro || "");
+  //       setAddrNeighborhood(viaCepData.bairro || "");
+  //       setAddrCity(viaCepData.localidade || "");
+  //       setAddrState(viaCepData.uf || "");
+  //     }
+  //     const geoResult = await geocodeCep(cleanCep);
+  //     if (geoResult.success && geoResult.coordinates) {
+  //       setGpsLat(geoResult.coordinates.lat.toString());
+  //       setGpsLng(geoResult.coordinates.lng.toString());
+  //       toast({ title: "Coordenadas encontradas!" });
+  //     } else {
+  //       toast({ title: "CEP encontrado, mas não foi possível obter coordenadas", description: "Insira latitude e longitude manualmente.", variant: "destructive" });
+  //     }
+  //   } catch {
+  //     toast({ title: "Erro ao buscar CEP", variant: "destructive" });
+  //   }
+  //   setGeocoding(false);
+  // }
 
-  async function saveAddress() {
-    if (!restaurant) return;
-    setSavingAddress(true);
-    const fullAddress = [addrStreet, addrNumber, addrNeighborhood, addrCity, addrState].filter(Boolean).join(", ");
-    const { error } = await supabase
-      .from("restaurants")
-      .update({
-        address_cep: addrCep || null,
-        address_street: addrStreet || null,
-        address_number: addrNumber || null,
-        address_complement: addrComplement || null,
-        address_neighborhood: addrNeighborhood || null,
-        address_city: addrCity || null,
-        address_state: addrState || null,
-        address: fullAddress || null,
-        restaurant_lat: gpsLat ? parseFloat(gpsLat) : null,
-        restaurant_lng: gpsLng ? parseFloat(gpsLng) : null,
-      })
-      .eq("id", restaurant.id);
-    setSavingAddress(false);
-    if (error) {
-      toast({ title: "Erro ao salvar endereço", description: error.message, variant: "destructive" });
-    } else {
-      toast({ title: "Endereço salvo com sucesso!" });
-      setRestaurant(prev => prev ? { ...prev, restaurant_lat: gpsLat ? parseFloat(gpsLat) : null, restaurant_lng: gpsLng ? parseFloat(gpsLng) : null } : prev);
-    }
-  }
+  // async function saveAddress() {
+  //   if (!restaurant) return;
+  //   setSavingAddress(true);
+  //   const fullAddress = [addrStreet, addrNumber, addrNeighborhood, addrCity, addrState].filter(Boolean).join(", ");
+  //   const { error } = await supabase
+  //     .from("restaurants")
+  //     .update({
+  //       address_cep: addrCep || null,
+  //       address_street: addrStreet || null,
+  //       address_number: addrNumber || null,
+  //       address_complement: addrComplement || null,
+  //       address_neighborhood: addrNeighborhood || null,
+  //       address_city: addrCity || null,
+  //       address_state: addrState || null,
+  //       address: fullAddress || null,
+  //       restaurant_lat: gpsLat ? parseFloat(gpsLat) : null,
+  //       restaurant_lng: gpsLng ? parseFloat(gpsLng) : null,
+  //     })
+  //     .eq("id", restaurant.id);
+  //   setSavingAddress(false);
+  //   if (error) {
+  //     toast({ title: "Erro ao salvar endereço", description: error.message, variant: "destructive" });
+  //   } else {
+  //     toast({ title: "Endereço salvo com sucesso!" });
+  //     setRestaurant(prev => prev ? { ...prev, restaurant_lat: gpsLat ? parseFloat(gpsLat) : null, restaurant_lng: gpsLng ? parseFloat(gpsLng) : null } : prev);
+  //   }
+  // }
 
   function openAddDialog() {
     setEditingZone(null);
     setZoneCity("");
     setZoneName("");
     setZoneFee("");
-    setZoneMinRadius("");
-    setZoneMaxRadius("");
+    // setZoneMinRadius(""); // Removed - geolocation disabled
+    // setZoneMaxRadius(""); // Removed - geolocation disabled
     setZoneTime("");
     setDialogOpen(true);
   }
@@ -280,8 +283,8 @@ export default function AdminDelivery() {
     setZoneCity(zone.city || "");
     setZoneName(zone.name);
     setZoneFee(zone.fee.toString());
-    setZoneMinRadius(zone.min_radius_km?.toString() || "");
-    setZoneMaxRadius(zone.max_radius_km?.toString() || "");
+    // setZoneMinRadius(zone.min_radius_km?.toString() || ""); // Removed - geolocation disabled
+    // setZoneMaxRadius(zone.max_radius_km?.toString() || ""); // Removed - geolocation disabled
     setZoneTime(zone.estimated_time_min?.toString() || "");
     setDialogOpen(true);
   }
@@ -298,80 +301,49 @@ export default function AdminDelivery() {
       return;
     }
 
-    // Validation differs by mode
-    if (deliveryMode === "radius") {
-      if (!zoneName || !zoneFee || !zoneMaxRadius) {
-        toast({ title: "Preencha nome, raio máximo e taxa", variant: "destructive" });
-        return;
-      }
-    } else {
-      if (!zoneName || !zoneFee) {
-        toast({ title: "Preencha os campos obrigatórios", variant: "destructive" });
-        return;
-      }
+    // Validation - only neighborhood mode now (geolocation removed)
+    if (!zoneName || !zoneFee) {
+      toast({ title: "Preencha os campos obrigatórios", variant: "destructive" });
+      return;
     }
 
     setSaving(true);
 
     try {
-      if (deliveryMode === "radius") {
-        // Radius zone save
+      // Only neighborhood zone save (geolocation removed)
+      if (editingZone) {
         const zoneData = {
           restaurant_id: restaurant.id,
-          zone_type: "radius" as const,
+          zone_type: "neighborhood" as const,
           name: zoneName.trim(),
-          city: null,
+          city: zoneCity || null,
           fee: parseFloat(zoneFee),
-          min_radius_km: zoneMinRadius ? parseFloat(zoneMinRadius) : 0,
-          max_radius_km: parseFloat(zoneMaxRadius),
+          min_radius_km: null,
+          max_radius_km: null,
           estimated_time_min: zoneTime ? parseInt(zoneTime) : null,
+          is_active: editingZone.is_active,
         };
 
-        if (editingZone) {
-          const { error } = await supabase.from("delivery_zones").update(zoneData).eq("id", editingZone.id);
-          if (error) throw error;
-          toast({ title: "Faixa atualizada!" });
-        } else {
-          const { error } = await supabase.from("delivery_zones").insert(zoneData);
-          if (error) throw error;
-          toast({ title: "Faixa adicionada!" });
-        }
+        const { error } = await supabase.from("delivery_zones").update(zoneData).eq("id", editingZone.id);
+        if (error) throw error;
+        toast({ title: "Zona atualizada!" });
       } else {
-        // Neighborhood zone save
-        if (editingZone) {
-          const zoneData = {
-            restaurant_id: restaurant.id,
-            zone_type: "neighborhood" as const,
-            name: zoneName.trim(),
-            city: zoneCity || null,
-            fee: parseFloat(zoneFee),
-            min_radius_km: null,
-            max_radius_km: null,
-            estimated_time_min: zoneTime ? parseInt(zoneTime) : null,
-            is_active: editingZone.is_active,
-          };
+        const names = parseBulkNames(zoneName);
+        const rows = names.map(name => ({
+          restaurant_id: restaurant.id,
+          zone_type: "neighborhood" as const,
+          name,
+          city: zoneCity || null,
+          fee: parseFloat(zoneFee),
+          min_radius_km: null,
+          max_radius_km: null,
+          estimated_time_min: zoneTime ? parseInt(zoneTime) : null,
+          is_active: true,
+        }));
 
-          const { error } = await supabase.from("delivery_zones").update(zoneData).eq("id", editingZone.id);
-          if (error) throw error;
-          toast({ title: "Zona atualizada!" });
-        } else {
-          const names = parseBulkNames(zoneName);
-          const rows = names.map(name => ({
-            restaurant_id: restaurant.id,
-            zone_type: "neighborhood" as const,
-            name,
-            city: zoneCity || null,
-            fee: parseFloat(zoneFee),
-            min_radius_km: null,
-            max_radius_km: null,
-            estimated_time_min: zoneTime ? parseInt(zoneTime) : null,
-            is_active: true,
-          }));
-
-          const { error } = await supabase.from("delivery_zones").insert(rows);
-          if (error) throw error;
-          toast({ title: `${names.length} ${names.length === 1 ? 'setor/bairro' : 'setores/bairros'} adicionado${names.length === 1 ? '' : 's'}!` });
-        }
+        const { error } = await supabase.from("delivery_zones").insert(rows);
+        if (error) throw error;
+        toast({ title: `${names.length} ${names.length === 1 ? 'setor/bairro' : 'setores/bairros'} adicionado${names.length === 1 ? '' : 's'}!` });
       }
 
       setDialogOpen(false);
@@ -452,8 +424,9 @@ export default function AdminDelivery() {
   }
 
   const neighborhoodZones = zones.filter(z => z.zone_type === "neighborhood");
-  const radiusZones = zones.filter(z => z.zone_type === "radius").sort((a, b) => (a.min_radius_km || 0) - (b.min_radius_km || 0));
-  const currentFilteredZones = deliveryMode === "radius" ? radiusZones : neighborhoodZones;
+  // radiusZones removed - geolocation disabled
+  // const radiusZones = zones.filter(z => z.zone_type === "radius").sort((a, b) => (a.min_radius_km || 0) - (b.min_radius_km || 0));
+  const currentFilteredZones = neighborhoodZones; // Always neighborhood zones
 
   if (loading) {
     return (
@@ -473,8 +446,8 @@ export default function AdminDelivery() {
         </p>
       </div>
 
-      {/* Modo de entrega */}
-      <Card>
+      {/* Modo de entrega - REMOVED (geolocation disabled, always zones) */}
+      {/* <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Map className="w-5 h-5" />
@@ -617,7 +590,7 @@ export default function AdminDelivery() {
             </div>
           )}
         </CardContent>
-      </Card>
+      </Card> */}
 
       {/* Configurações Gerais */}
       <Card>
@@ -642,11 +615,12 @@ export default function AdminDelivery() {
                 <span className="text-muted-foreground">minutos</span>
               </div>
               <p className="text-xs text-muted-foreground">
-                Será usado quando a faixa não tiver tempo específico
+                Será usado quando a zona não tiver tempo específico
               </p>
             </div>
 
-            {deliveryMode === "radius" && (
+            {/* Taxa fixa padrão removed - geolocation disabled */}
+            {/* {deliveryMode === "radius" && (
               <div className="space-y-2">
                 <Label>Taxa fixa padrão (R$)</Label>
                 <Input
@@ -661,7 +635,7 @@ export default function AdminDelivery() {
                   Usada quando nenhuma faixa de raio for encontrada
                 </p>
               </div>
-            )}
+            )} */}
           </div>
 
           <Button onClick={saveSettings} disabled={saving}>
@@ -675,46 +649,45 @@ export default function AdminDelivery() {
         </CardContent>
       </Card>
 
-      {/* Zonas de Entrega */}
-      {deliveryMode === "zones" && (
-        <NeighborhoodZonesCard
-          zones={neighborhoodZones}
-          selectedIds={selectedIds}
-          toggleSelect={toggleSelect}
-          toggleSelectAll={toggleSelectAll}
-          toggleSelectCity={toggleSelectCity}
-          openAddDialog={openAddDialog}
-          openEditDialog={openEditDialog}
-          toggleZoneActive={toggleZoneActive}
-          deleteZone={deleteZone}
-          editingCity={editingCity}
-          setEditingCity={setEditingCity}
-          newCityName={newCityName}
-          setNewCityName={setNewCityName}
-          renameCityZones={renameCityZones}
-          saving={saving}
-          bulkEditOpen={bulkEditOpen}
-          setBulkEditOpen={setBulkEditOpen}
-          bulkFee={bulkFee}
-          setBulkFee={setBulkFee}
-          bulkTime={bulkTime}
-          setBulkTime={setBulkTime}
-          bulkSaving={bulkSaving}
-          bulkEdit={bulkEdit}
-          bulkDelete={bulkDelete}
-          bulkToggleActive={bulkToggleActive}
-          setSelectedIds={setSelectedIds}
-          currentFilteredZones={currentFilteredZones}
-          setZoneCity={setZoneCity}
-          setZoneName={setZoneName}
-          setZoneFee={setZoneFee}
-          setZoneTime={setZoneTime}
-          setDialogOpen={setDialogOpen}
-          dialogOpen={dialogOpen}
-        />
-      )}
+      {/* Zonas de Entrega - Always show (geolocation removed) */}
+      <NeighborhoodZonesCard
+        zones={neighborhoodZones}
+        selectedIds={selectedIds}
+        toggleSelect={toggleSelect}
+        toggleSelectAll={toggleSelectAll}
+        toggleSelectCity={toggleSelectCity}
+        openAddDialog={openAddDialog}
+        openEditDialog={openEditDialog}
+        toggleZoneActive={toggleZoneActive}
+        deleteZone={deleteZone}
+        editingCity={editingCity}
+        setEditingCity={setEditingCity}
+        newCityName={newCityName}
+        setNewCityName={setNewCityName}
+        renameCityZones={renameCityZones}
+        saving={saving}
+        bulkEditOpen={bulkEditOpen}
+        setBulkEditOpen={setBulkEditOpen}
+        bulkFee={bulkFee}
+        setBulkFee={setBulkFee}
+        bulkTime={bulkTime}
+        setBulkTime={setBulkTime}
+        bulkSaving={bulkSaving}
+        bulkEdit={bulkEdit}
+        bulkDelete={bulkDelete}
+        bulkToggleActive={bulkToggleActive}
+        setSelectedIds={setSelectedIds}
+        currentFilteredZones={currentFilteredZones}
+        setZoneCity={setZoneCity}
+        setZoneName={setZoneName}
+        setZoneFee={setZoneFee}
+        setZoneTime={setZoneTime}
+        setDialogOpen={setDialogOpen}
+        dialogOpen={dialogOpen}
+      />
 
-      {deliveryMode === "radius" && (
+      {/* RadiusZonesCard removed - geolocation disabled */}
+      {/* {deliveryMode === "radius" && (
         <RadiusZonesCard
           zones={radiusZones}
           openAddDialog={openAddDialog}
@@ -722,7 +695,7 @@ export default function AdminDelivery() {
           toggleZoneActive={toggleZoneActive}
           deleteZone={deleteZone}
         />
-      )}
+      )} */}
 
       {/* Create/Edit Dialog — shared */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
@@ -730,21 +703,20 @@ export default function AdminDelivery() {
           <DialogHeader>
             <DialogTitle>
               {editingZone
-                ? deliveryMode === "radius" ? "Editar Faixa" : "Editar Setor/Bairro"
-                : deliveryMode === "radius" ? "Nova Faixa de Raio" : "Adicionar Setores/Bairros"
+                ? "Editar Setor/Bairro"
+                : "Adicionar Setores/Bairros"
               }
             </DialogTitle>
             <DialogDescription>
-              {deliveryMode === "radius"
-                ? "Defina a faixa de distância e o valor da taxa"
-                : editingZone
-                  ? "Edite as informações deste setor/bairro"
-                  : "Adicione vários setores/bairros de uma vez separando por vírgula"
+              {editingZone
+                ? "Edite as informações deste setor/bairro"
+                : "Adicione vários setores/bairros de uma vez separando por vírgula"
               }
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
-            {deliveryMode === "radius" ? (
+            {/* Radius mode form removed - geolocation disabled */}
+            {/* {deliveryMode === "radius" ? (
               <>
                 <div className="space-y-2">
                   <Label>Nome da faixa *</Label>
@@ -769,7 +741,7 @@ export default function AdminDelivery() {
                   <Input type="number" placeholder="Ex: 30" value={zoneTime} onChange={(e) => setZoneTime(e.target.value)} />
                 </div>
               </>
-            ) : (
+            ) : ( */}
               <>
                 <div className="space-y-2">
                   <Label>Cidade</Label>
@@ -819,7 +791,7 @@ export default function AdminDelivery() {
                   <Label htmlFor="zone-active" className="text-sm">Setor/Bairro ativo</Label>
                 </div>
               </>
-            )}
+            {/* )} */}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
@@ -834,131 +806,132 @@ export default function AdminDelivery() {
 }
 
 // ─── Radius Zones Card ─────────────────────────────────────
-function RadiusZonesCard({
-  zones,
-  openAddDialog,
-  openEditDialog,
-  toggleZoneActive,
-  deleteZone,
-}: {
-  zones: DeliveryZone[];
-  openAddDialog: () => void;
-  openEditDialog: (z: DeliveryZone) => void;
-  toggleZoneActive: (z: DeliveryZone) => void;
-  deleteZone: (z: DeliveryZone) => void;
-}) {
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Radar className="w-5 h-5" />
-          Faixas de Raio
-        </CardTitle>
-        <CardDescription>
-          Configure as faixas de distância e suas respectivas taxas. O GPS do cliente será usado para calcular automaticamente.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="flex justify-end">
-          <Button onClick={openAddDialog}>
-            <Plus className="w-4 h-4 mr-2" />
-            Nova Faixa
-          </Button>
-        </div>
+// COMMENTED OUT - Geolocation feature disabled
+// function RadiusZonesCard({
+//   zones,
+//   openAddDialog,
+//   openEditDialog,
+//   toggleZoneActive,
+//   deleteZone,
+// }: {
+//   zones: DeliveryZone[];
+//   openAddDialog: () => void;
+//   openEditDialog: (z: DeliveryZone) => void;
+//   toggleZoneActive: (z: DeliveryZone) => void;
+//   deleteZone: (z: DeliveryZone) => void;
+// }) {
+//   return (
+//     <Card>
+//       <CardHeader>
+//         <CardTitle className="flex items-center gap-2">
+//           <Radar className="w-5 h-5" />
+//           Faixas de Raio
+//         </CardTitle>
+//         <CardDescription>
+//           Configure as faixas de distância e suas respectivas taxas. O GPS do cliente será usado para calcular automaticamente.
+//         </CardDescription>
+//       </CardHeader>
+//       <CardContent className="space-y-4">
+//         <div className="flex justify-end">
+//           <Button onClick={openAddDialog}>
+//             <Plus className="w-4 h-4 mr-2" />
+//             Nova Faixa
+//           </Button>
+//         </div>
 
-        {zones.length === 0 ? (
-          <div className="text-center py-12 text-muted-foreground">
-            <Radar className="w-12 h-12 mx-auto mb-4 opacity-50" />
-            <p>Nenhuma faixa de raio cadastrada</p>
-            <p className="text-sm">Adicione faixas para definir taxas por distância</p>
-          </div>
-        ) : (
-          <>
-            {/* Desktop */}
-            <div className="hidden md:block">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Faixa</TableHead>
-                    <TableHead>Distância</TableHead>
-                    <TableHead>Taxa</TableHead>
-                    <TableHead>Tempo</TableHead>
-                    <TableHead>Ativo</TableHead>
-                    <TableHead className="w-32">Ações</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {zones.map((zone) => (
-                    <TableRow key={zone.id}>
-                      <TableCell className="font-medium">{zone.name}</TableCell>
-                      <TableCell>
-                        <Badge variant="outline">
-                          {zone.min_radius_km || 0}km — {zone.max_radius_km}km
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="secondary">R$ {zone.fee.toFixed(2)}</Badge>
-                      </TableCell>
-                      <TableCell>
-                        {zone.estimated_time_min ? `${zone.estimated_time_min} min` : <span className="text-muted-foreground">Padrão</span>}
-                      </TableCell>
-                      <TableCell>
-                        <Switch checked={zone.is_active} onCheckedChange={() => toggleZoneActive(zone)} />
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex gap-1">
-                          <Button variant="ghost" size="sm" onClick={() => openEditDialog(zone)}>
-                            <Pencil className="w-4 h-4 mr-1" />Editar
-                          </Button>
-                          <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => deleteZone(zone)}>
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
+//         {zones.length === 0 ? (
+//           <div className="text-center py-12 text-muted-foreground">
+//             <Radar className="w-12 h-12 mx-auto mb-4 opacity-50" />
+//             <p>Nenhuma faixa de raio cadastrada</p>
+//             <p className="text-sm">Adicione faixas para definir taxas por distância</p>
+//           </div>
+//         ) : (
+//           <>
+//             {/* Desktop */}
+//             <div className="hidden md:block">
+//               <Table>
+//                 <TableHeader>
+//                   <TableRow>
+//                     <TableHead>Faixa</TableHead>
+//                     <TableHead>Distância</TableHead>
+//                     <TableHead>Taxa</TableHead>
+//                     <TableHead>Tempo</TableHead>
+//                     <TableHead>Ativo</TableHead>
+//                     <TableHead className="w-32">Ações</TableHead>
+//                   </TableRow>
+//                 </TableHeader>
+//                 <TableBody>
+//                   {zones.map((zone) => (
+//                     <TableRow key={zone.id}>
+//                       <TableCell className="font-medium">{zone.name}</TableCell>
+//                       <TableCell>
+//                         <Badge variant="outline">
+//                           {zone.min_radius_km || 0}km — {zone.max_radius_km}km
+//                         </Badge>
+//                       </TableCell>
+//                       <TableCell>
+//                         <Badge variant="secondary">R$ {zone.fee.toFixed(2)}</Badge>
+//                       </TableCell>
+//                       <TableCell>
+//                         {zone.estimated_time_min ? `${zone.estimated_time_min} min` : <span className="text-muted-foreground">Padrão</span>}
+//                       </TableCell>
+//                       <TableCell>
+//                         <Switch checked={zone.is_active} onCheckedChange={() => toggleZoneActive(zone)} />
+//                       </TableCell>
+//                       <TableCell>
+//                         <div className="flex gap-1">
+//                           <Button variant="ghost" size="sm" onClick={() => openEditDialog(zone)}>
+//                             <Pencil className="w-4 h-4 mr-1" />Editar
+//                           </Button>
+//                           <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => deleteZone(zone)}>
+//                             <Trash2 className="w-4 h-4" />
+//                           </Button>
+//                         </div>
+//                       </TableCell>
+//                     </TableRow>
+//                   ))}
+//                 </TableBody>
+//               </Table>
+//             </div>
 
-            {/* Mobile */}
-            <div className="md:hidden space-y-3">
-              {zones.map((zone) => (
-                <div key={zone.id} className="p-4 rounded-xl border bg-card space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="font-semibold">{zone.name}</span>
-                    <Badge variant="secondary">R$ {zone.fee.toFixed(2)}</Badge>
-                  </div>
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Radar className="w-3.5 h-3.5" />
-                    {zone.min_radius_km || 0}km — {zone.max_radius_km}km
-                    {zone.estimated_time_min && (
-                      <> · <Clock className="w-3.5 h-3.5" /> {zone.estimated_time_min} min</>
-                    )}
-                  </div>
-                  <div className="flex items-center justify-between pt-2 border-t border-border/50">
-                    <div className="flex items-center gap-2">
-                      <Switch checked={zone.is_active} onCheckedChange={() => toggleZoneActive(zone)} />
-                      <span className="text-xs text-muted-foreground">{zone.is_active ? "Ativo" : "Inativo"}</span>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <Button variant="ghost" size="sm" onClick={() => openEditDialog(zone)} className="h-8">
-                        <Pencil className="w-3.5 h-3.5 mr-1" />Editar
-                      </Button>
-                      <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive h-8" onClick={() => deleteZone(zone)}>
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
+//             {/* Mobile */}
+//             <div className="md:hidden space-y-3">
+//               {zones.map((zone) => (
+//                 <div key={zone.id} className="p-4 rounded-xl border bg-card space-y-3">
+//                   <div className="flex items-center justify-between">
+//                     <span className="font-semibold">{zone.name}</span>
+//                     <Badge variant="secondary">R$ {zone.fee.toFixed(2)}</Badge>
+//                   </div>
+//                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
+//                     <Radar className="w-3.5 h-3.5" />
+//                     {zone.min_radius_km || 0}km — {zone.max_radius_km}km
+//                     {zone.estimated_time_min && (
+//                       <> · <Clock className="w-3.5 h-3.5" /> {zone.estimated_time_min} min</>
+//                     )}
+//                   </div>
+//                   <div className="flex items-center justify-between pt-2 border-t border-border/50">
+//                     <div className="flex items-center gap-2">
+//                       <Switch checked={zone.is_active} onCheckedChange={() => toggleZoneActive(zone)} />
+//                       <span className="text-xs text-muted-foreground">{zone.is_active ? "Ativo" : "Inativo"}</span>
+//                     </div>
+//                     <div className="flex items-center gap-1">
+//                       <Button variant="ghost" size="sm" onClick={() => openEditDialog(zone)} className="h-8">
+//                         <Pencil className="w-3.5 h-3.5 mr-1" />Editar
+//                       </Button>
+//                       <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive h-8" onClick={() => deleteZone(zone)}>
+//                         <Trash2 className="w-3.5 h-3.5" />
+//                       </Button>
+//                     </div>
+//                   </div>
+//                 </div>
+//               ))}
+//             </div>
+//           </>
+//         )}
+//       </CardContent>
+//     </Card>
+//   );
+// }
 
 // ─── Neighborhood Zones Card ────────────────────────────────
 function NeighborhoodZonesCard({

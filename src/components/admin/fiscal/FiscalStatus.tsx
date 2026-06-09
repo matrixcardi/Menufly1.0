@@ -13,7 +13,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Zap, Rocket, Check, X, FileText, RefreshCctv, Plug2, Edit2, RotateCcw } from "lucide-react";
+import { Check, X, FileText, RefreshCcw } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { maskCpfCnpj } from "@/utils/cpfCnpj";
@@ -27,12 +27,8 @@ interface FiscalStatusProps {
 export default function FiscalStatus({ config, onRefresh, onEdit }: FiscalStatusProps) {
   const { toast } = useToast();
   const [showDeactivateConfirm, setShowDeactivateConfirm] = useState(false);
-  const [showChangeProviderConfirm, setShowChangeProviderConfirm] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const providerName = config.provider === "focus_nfe" ? "Focus NFe" : "SpeedNFe";
-  const providerIcon = config.provider === "focus_nfe" ? Zap : Rocket;
-  const environmentLabel = config.environment === "homologation" ? "Homologação" : "Produção";
   const isActive = config.is_active;
 
   const handleToggleActive = async (newValue: boolean) => {
@@ -83,35 +79,14 @@ export default function FiscalStatus({ config, onRefresh, onEdit }: FiscalStatus
     }
   };
 
-  const handleChangeProvider = async () => {
-    setShowChangeProviderConfirm(false);
-    setLoading(true);
-    try {
-      const { error } = await supabase
-        .from("fiscal_config")
-        .delete()
-        .eq("restaurant_id", config.restaurant_id);
-
-      if (error) throw error;
-
-      console.log("[FISCAL] Trocar provedor");
-      toast({ title: "Configuração removida" });
-      onRefresh();
-    } catch (error) {
-      console.error("[FISCAL] Erro ao remover config:", error);
-      toast({ title: "Erro ao remover configuração", variant: "destructive" });
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const handleEdit = () => {
     console.log("[FISCAL] Editar configurações");
     onEdit();
   };
 
-  const handleTestConnection = () => {
-    toast({ title: "Teste de conexão em desenvolvimento", variant: "default" });
+  const handleUpdateCertificate = () => {
+    console.log("[FISCAL] Atualizar certificado");
+    onEdit();
   };
 
   return (
@@ -139,23 +114,10 @@ export default function FiscalStatus({ config, onRefresh, onEdit }: FiscalStatus
         </CardHeader>
         <CardContent>
           <div className="grid md:grid-cols-2 gap-6">
-            {/* Column 1: Provider Data */}
+            {/* Column 1: Company Data */}
             <div className="space-y-4">
-              <h3 className="font-semibold text-lg">Dados do Provedor</h3>
+              <h3 className="font-semibold text-lg">Dados da Empresa</h3>
               <div className="space-y-3">
-                <div className="flex items-center gap-2">
-                  <providerIcon className="w-5 h-5 text-orange-500" />
-                  <span className="text-sm text-muted-foreground">Provedor:</span>
-                  <span className="font-medium">{providerName}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Badge
-                    variant={config.environment === "homologation" ? "secondary" : "default"}
-                    className={config.environment === "production" ? "bg-green-600 hover:bg-green-700" : "bg-orange-500 hover:bg-orange-600"}
-                  >
-                    {environmentLabel}
-                  </Badge>
-                </div>
                 <div>
                   <span className="text-sm text-muted-foreground">Razão Social:</span>
                   <p className="font-medium">{config.razao_social}</p>
@@ -164,10 +126,31 @@ export default function FiscalStatus({ config, onRefresh, onEdit }: FiscalStatus
                   <span className="text-sm text-muted-foreground">CNPJ:</span>
                   <p className="font-medium">{maskCpfCnpj(config.cnpj)}</p>
                 </div>
+                {config.nome_fantasia && (
+                  <div>
+                    <span className="text-sm text-muted-foreground">Nome Fantasia:</span>
+                    <p className="font-medium">{config.nome_fantasia}</p>
+                  </div>
+                )}
+                <div>
+                  <span className="text-sm text-muted-foreground">Inscrição Estadual:</span>
+                  <p className="font-medium">{config.inscricao_estadual}</p>
+                </div>
+                <div>
+                  <span className="text-sm text-muted-foreground">Regime Tributário:</span>
+                  <p className="font-medium">{config.regime_tributario?.replace(/_/g, " ").toUpperCase()}</p>
+                </div>
+                <div>
+                  <span className="text-sm text-muted-foreground">Endereço:</span>
+                  <p className="font-medium text-sm">
+                    {config.logradouro}, {config.numero} {config.complemento && `- ${config.complemento}`}<br />
+                    {config.bairro} - {config.cidade}/{config.uf}
+                  </p>
+                </div>
               </div>
             </div>
 
-            {/* Column 2: Statistics (placeholders) */}
+            {/* Column 2: Statistics & Certificate */}
             <div className="space-y-4">
               <h3 className="font-semibold text-lg">Estatísticas</h3>
               <div className="space-y-3">
@@ -182,6 +165,34 @@ export default function FiscalStatus({ config, onRefresh, onEdit }: FiscalStatus
                 <div>
                   <span className="text-sm text-muted-foreground">Última emissão:</span>
                   <p className="font-medium text-muted-foreground">Nenhuma ainda</p>
+                </div>
+              </div>
+
+              <h3 className="font-semibold text-lg pt-4">Certificado Digital</h3>
+              <div className="space-y-2">
+                <div>
+                  <span className="text-sm text-muted-foreground">Arquivo:</span>
+                  <p className="font-medium text-sm">{config.certificado_nome_arquivo || "certificado.pfx"}</p>
+                </div>
+                <div>
+                  <span className="text-sm text-muted-foreground">Status:</span>
+                  {(() => {
+                    if (!config.certificado_valido_ate) {
+                      return <Badge variant="secondary" className="ml-2">Aguardando validação</Badge>;
+                    }
+                    
+                    const validUntil = new Date(config.certificado_valido_ate);
+                    const today = new Date();
+                    const daysUntilExpiry = Math.ceil((validUntil.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+                    
+                    if (daysUntilExpiry < 0) {
+                      return <Badge variant="destructive" className="ml-2">VENCIDO</Badge>;
+                    } else if (daysUntilExpiry < 30) {
+                      return <Badge className="ml-2 bg-orange-500 hover:bg-orange-600">Vence em {daysUntilExpiry} dias</Badge>;
+                    } else {
+                      return <Badge className="ml-2 bg-green-600 hover:bg-green-700">Válido até {validUntil.toLocaleDateString('pt-BR')}</Badge>;
+                    }
+                  })()}
                 </div>
               </div>
             </div>
@@ -236,23 +247,11 @@ export default function FiscalStatus({ config, onRefresh, onEdit }: FiscalStatus
       <div className="flex flex-wrap gap-3">
         <Button onClick={handleEdit} variant="outline" className="flex-1 min-w-[200px]" disabled={loading}>
           <FileText className="w-4 h-4 mr-2" />
-          Editar Configurações
+          Editar Dados
         </Button>
-        <Button
-          onClick={() => setShowChangeProviderConfirm(true)}
-          variant="outline"
-          className="flex-1 min-w-[200px]"
-          disabled={loading}
-        >
-          <RotateCcw className="w-4 h-4 mr-2" />
-          Trocar Provedor
-        </Button>
-        <Button onClick={handleTestConnection} variant="outline" className="flex-1 min-w-[200px]" disabled>
-          <Plug2 className="w-4 h-4 mr-2" />
-          Testar Conexão
-          <Badge variant="secondary" className="ml-2 text-xs">
-            Em breve
-          </Badge>
+        <Button onClick={handleUpdateCertificate} variant="outline" className="flex-1 min-w-[200px]" disabled={loading}>
+          <RefreshCcw className="w-4 h-4 mr-2" />
+          Atualizar Certificado
         </Button>
       </div>
 
@@ -268,23 +267,6 @@ export default function FiscalStatus({ config, onRefresh, onEdit }: FiscalStatus
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
             <AlertDialogAction onClick={handleConfirmDeactivate}>Sim, desativar</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      {/* Change Provider Confirmation Dialog */}
-      <AlertDialog open={showChangeProviderConfirm} onOpenChange={setShowChangeProviderConfirm}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Trocar provedor de NFCe?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Você perderá a configuração atual e precisará configurar tudo novamente.
-              Esta ação NÃO pode ser desfeita.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={handleChangeProvider}>Sim, trocar</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

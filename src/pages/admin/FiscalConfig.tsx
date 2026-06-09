@@ -1,14 +1,61 @@
-import { useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
-import ProviderSelection from "@/components/admin/fiscal/ProviderSelection";
-import FiscalWizard from "@/components/admin/fiscal/FiscalWizard";
-import FiscalStatus from "@/components/admin/fiscal/FiscalStatus";
-import { Skeleton } from "@/components/ui/skeleton";
+import { Construction, Sparkles } from 'lucide-react'
+import { Card } from '@/components/ui/card'
 
-export default function FiscalConfig() {
+// TODO: Uncomment when NFe feature is ready for launch
+// import { useEffect, useState } from "react";
+// import { supabase } from "@/integrations/supabase/client";
+// import FiscalWizard from "@/components/admin/fiscal/FiscalWizard";
+// import FiscalStatus from "@/components/admin/fiscal/FiscalStatus";
+// import { FiscalWelcome } from "@/components/admin/fiscal/FiscalWelcome";
+// import { Skeleton } from "@/components/ui/skeleton";
+// import { RequireElite } from "@/components/common/RequireElite";
+
+const FiscalConfig = () => {
+  return (
+    <div className="container mx-auto p-6 max-w-2xl">
+      <Card className="p-12 border-2 border-amber-500/20 bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-950/20 dark:to-orange-950/20">
+        <div className="flex flex-col items-center text-center space-y-6">
+          <div className="rounded-full bg-amber-500/10 p-6 relative">
+            <Construction className="w-16 h-16 text-amber-600" />
+            <Sparkles className="w-6 h-6 text-amber-500 absolute -top-1 -right-1" />
+          </div>
+
+          <div>
+            <h2 className="text-3xl font-bold mb-2">
+              🚧 Em Breve
+            </h2>
+            <h3 className="text-xl font-semibold text-foreground">
+              Notas Fiscais Eletrônicas (NFCe)
+            </h3>
+          </div>
+
+          <p className="text-muted-foreground max-w-md text-lg">
+            Estamos finalizando os últimos detalhes para que você
+            possa emitir suas notas fiscais direto pelo MenuFly.
+          </p>
+
+          <div className="bg-white/50 dark:bg-black/20 rounded-lg p-4 max-w-md w-full">
+            <p className="text-sm text-muted-foreground">
+              ✨ Em breve disponível para o plano <strong className="text-amber-600">MenuFly Elite</strong>
+            </p>
+          </div>
+
+          <p className="text-xs text-muted-foreground">
+            Estamos trabalhando para entregar a melhor experiência possível 💪
+          </p>
+        </div>
+      </Card>
+    </div>
+  )
+}
+
+export default FiscalConfig
+
+/*
+// ORIGINAL CODE - COMMENTED OUT UNTIL NFe IS READY
+function FiscalConfigContent() {
   const [restaurantId, setRestaurantId] = useState<string | null>(null);
   const [showWizard, setShowWizard] = useState(false);
-  const [selectedProvider, setSelectedProvider] = useState<"focus_nfe" | "speed_nfe" | null>(null);
   const [fiscalConfig, setFiscalConfig] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
@@ -53,19 +100,12 @@ export default function FiscalConfig() {
     fetchFiscalConfig();
   }, [restaurantId]);
 
-  const handleProviderSelect = (provider: "focus_nfe" | "speed_nfe") => {
-    setSelectedProvider(provider);
-    setShowWizard(true);
-  };
-
   const handleWizardCancel = () => {
     setShowWizard(false);
-    setSelectedProvider(null);
   };
 
   const handleWizardComplete = () => {
     setShowWizard(false);
-    setSelectedProvider(null);
     // Refresh fiscal config after wizard completion
     const refreshConfig = async () => {
       if (!restaurantId) return;
@@ -90,9 +130,12 @@ export default function FiscalConfig() {
 
   const handleEditConfig = () => {
     if (fiscalConfig) {
-      setSelectedProvider(fiscalConfig.provider);
       setShowWizard(true);
     }
+  };
+
+  const handleConfigureNow = () => {
+    setShowWizard(true);
   };
 
   const handleRefreshConfig = () => {
@@ -128,9 +171,8 @@ export default function FiscalConfig() {
 
   return (
     <div className="p-6">
-      {showWizard && selectedProvider ? (
+      {showWizard ? (
         <FiscalWizard
-          provider={selectedProvider}
           onCancel={handleWizardCancel}
           onComplete={handleWizardComplete}
           initialData={fiscalConfig}
@@ -142,8 +184,28 @@ export default function FiscalConfig() {
           onEdit={handleEditConfig}
         />
       ) : (
-        <ProviderSelection onProviderSelect={handleProviderSelect} />
+        <FiscalWelcome onConfigure={handleConfigureNow} />
       )}
     </div>
   );
 }
+
+export default function FiscalConfig() {
+  return (
+    <RequireElite
+      feature="nfe"
+      featureName="Notas Fiscais Eletrônicas (NFCe)"
+      featureDescription="Emita NFCe diretamente pelo MenuFly, sem precisar de outras contas ou serviços externos."
+      featureBullets={[
+        "Emissão automática a cada pedido finalizado",
+        "DANFE enviado automaticamente ao cliente",
+        "Cancelamento e consulta de notas",
+        "Conforme exigências da SEFAZ",
+        "Suporte completo da nossa equipe",
+      ]}
+    >
+      <FiscalConfigContent />
+    </RequireElite>
+  );
+}
+*/

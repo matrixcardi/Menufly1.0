@@ -14,6 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { usePlan } from "@/hooks/usePlan";
 
 interface EmitirNFeButtonProps {
   orderId: string;
@@ -45,7 +46,14 @@ export default function EmitirNFeButton({
   onInvoiceUpdate,
 }: EmitirNFeButtonProps) {
   const { toast } = useToast();
+  const { hasFeature, loading: planLoading } = usePlan();
   const [loading, setLoading] = useState(false);
+
+  // Não mostra nada enquanto carrega o plano
+  if (planLoading) return null;
+
+  // Cliente sem feature NFe não vê o botão
+  if (!hasFeature('nfe')) return null;
 
   const providerName = fiscalProvider === "focus_nfe" ? "Focus NFe" : "SpeedNFe";
   const environmentLabel = fiscalEnvironment === "homologation" ? "Homologação" : "Produção";

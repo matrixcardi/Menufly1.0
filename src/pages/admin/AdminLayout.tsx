@@ -6,6 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { User, Session } from "@supabase/supabase-js";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useSubscriptionPlan } from "@/hooks/useSubscriptionPlan";
+import { usePlan } from "@/hooks/usePlan";
 import { playNewOrderSound, NotificationSoundType, unlockAudio } from "@/lib/notification-sound";
 import { initPushNotifications } from "@/lib/push-notifications";
 import { RestaurantProvider, useRestaurantContext, AdminRestaurant } from "@/contexts/RestaurantContext";
@@ -81,6 +82,7 @@ import {
   Plus,
   X,
   Receipt,
+  Lock,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -259,6 +261,7 @@ function AdminSidebar({ pendingOrdersCount, isCollaborator, canAccessWhatsAppBot
   const location = useLocation();
   const navigate = useNavigate();
   const { selectedRestaurant, restaurants } = useRestaurantContext();
+  const { hasFeature } = usePlan();
 
   let filteredNavItems = isCollaborator ? navItems.filter(i => !('restrictCollaborator' in i && i.restrictCollaborator)) : navItems;
   if (!canAccessWhatsAppBot) {
@@ -479,23 +482,27 @@ function AdminSidebar({ pendingOrdersCount, isCollaborator, canAccessWhatsAppBot
             <CollapsibleContent>
               <SidebarGroupContent>
                 <SidebarMenu>
-                  {filteredSettingsItems.map((item) => (
-                    <SidebarMenuItem key={item.title}>
-                      <SidebarMenuButton asChild>
-                        <NavLink
-                          to={item.url}
-                          className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-secondary/80 transition-all duration-200"
-                          activeClassName="bg-primary/10 text-primary font-medium shadow-apple-sm"
-                        >
-                          <item.icon className="w-4.5 h-4.5" />
-                          <span className="flex-1 text-sm">{item.title}</span>
-                          {'comingSoon' in item && item.comingSoon && (
-                            <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 font-bold tracking-wide rounded-full">EM BREVE</Badge>
-                          )}
-                        </NavLink>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  ))}
+                  {filteredSettingsItems.map((item) => {
+                    const isLocked = item.title === "Notas Fiscais" && !hasFeature("nfe");
+                    return (
+                      <SidebarMenuItem key={item.title}>
+                        <SidebarMenuButton asChild>
+                          <NavLink
+                            to={item.url}
+                            className={`flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-secondary/80 transition-all duration-200 ${isLocked ? "opacity-60" : ""}`}
+                            activeClassName="bg-primary/10 text-primary font-medium shadow-apple-sm"
+                          >
+                            <item.icon className="w-4.5 h-4.5" />
+                            <span className="flex-1 text-sm">{item.title}</span>
+                            {isLocked && <Lock className="w-3 h-3 text-muted-foreground" />}
+                            {'comingSoon' in item && item.comingSoon && (
+                              <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 font-bold tracking-wide rounded-full">EM BREVE</Badge>
+                            )}
+                          </NavLink>
+                        </SidebarMenuButton>
+                      </SidebarMenuItem>
+                    );
+                  })}
                 </SidebarMenu>
               </SidebarGroupContent>
             </CollapsibleContent>

@@ -50,6 +50,7 @@ import { differenceInDays, format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useToast } from "@/hooks/use-toast";
 import BulkWhatsappSender from "@/components/crm/BulkWhatsappSender";
+import CustomerOrdersHistoryModal from "@/components/crm/CustomerOrdersHistoryModal";
 import { useRestaurantContext } from "@/contexts/RestaurantContext";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
@@ -112,6 +113,8 @@ export default function AdminCRM() {
   const [newCustomerName, setNewCustomerName] = useState("");
   const [newCustomerPhone, setNewCustomerPhone] = useState("");
   const [savingCustomer, setSavingCustomer] = useState(false);
+  const [ordersHistoryModalOpen, setOrdersHistoryModalOpen] = useState(false);
+  const [ordersHistoryCustomer, setOrdersHistoryCustomer] = useState<Customer | null>(null);
   const { toast } = useToast();
 
   const restaurantId = selectedRestaurant?.id || (selectedRestaurantIds.length === 1 ? selectedRestaurantIds[0] : null);
@@ -1053,6 +1056,23 @@ export default function AdminCRM() {
                     </div>
                   </ScrollArea>
                 )}
+
+                {/* View All Orders Button */}
+                {!detailLoading && customerOrders.length > 0 && detailCustomer.totalOrders > customerOrders.length && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full mt-2 gap-2"
+                    onClick={() => {
+                      setDetailCustomer(null);
+                      setOrdersHistoryModalOpen(true);
+                      setOrdersHistoryCustomer(detailCustomer);
+                    }}
+                  >
+                    <ShoppingBag className="w-4 h-4" />
+                    Ver todos os {detailCustomer.totalOrders} pedidos →
+                  </Button>
+                )}
               </div>
 
               {/* Actions */}
@@ -1114,6 +1134,15 @@ export default function AdminCRM() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Customer Orders History Modal */}
+      <CustomerOrdersHistoryModal
+        open={ordersHistoryModalOpen}
+        onOpenChange={setOrdersHistoryModalOpen}
+        customer={ordersHistoryCustomer}
+        restaurantId={restaurantId}
+        selectedRestaurantIds={selectedRestaurantIds}
+      />
     </div>
   );
 }
