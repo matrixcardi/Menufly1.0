@@ -326,7 +326,7 @@ export default function AdminCRM() {
           .in("restaurant_id", restIds)
           .or(`customer_phone.eq.${cleanPhone},customer_phone.eq.${customer.phone}`)
           .order("created_at", { ascending: false })
-          .limit(50),
+          .limit(3),
       ]);
 
       if (productRes.data?.image_url) {

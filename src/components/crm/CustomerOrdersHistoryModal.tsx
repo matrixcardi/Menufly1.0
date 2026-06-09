@@ -11,7 +11,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   ShoppingBag,
   DollarSign,
@@ -129,8 +128,9 @@ export default function CustomerOrdersHistoryModal({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="w-full sm:max-w-2xl overflow-y-auto">
-        <SheetHeader className="pb-4">
+      <SheetContent className="w-full sm:max-w-2xl p-0 flex flex-col h-full">
+        {/* Header fixo no topo */}
+        <SheetHeader className="px-6 py-4 border-b shrink-0">
           <SheetTitle className="flex items-center gap-2">
             <ShoppingBag className="w-5 h-5 text-primary" />
             Histórico Completo de Pedidos
@@ -138,74 +138,78 @@ export default function CustomerOrdersHistoryModal({
         </SheetHeader>
 
         {customer && (
-          <div className="space-y-4">
-            {/* Customer Summary */}
-            <div className="p-4 rounded-lg border bg-muted/30">
-              <div className="flex items-center gap-3 mb-3">
-                <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center text-lg font-bold text-primary">
-                  {customer.name.charAt(0).toUpperCase()}
+          <>
+            {/* Stats fixos */}
+            <div className="px-6 py-4 border-b shrink-0">
+              <div className="p-4 rounded-lg border bg-muted/30">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center text-lg font-bold text-primary">
+                    {customer.name.charAt(0).toUpperCase()}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h3 className="font-semibold text-base truncate">{customer.name}</h3>
+                    <p className="text-sm text-muted-foreground">{customer.phone}</p>
+                  </div>
                 </div>
-                <div className="flex-1 min-w-0">
-                  <h3 className="font-semibold text-base truncate">{customer.name}</h3>
-                  <p className="text-sm text-muted-foreground">{customer.phone}</p>
-                </div>
-              </div>
-              <div className="grid grid-cols-3 gap-3 text-center">
-                <div>
-                  <p className="text-2xl font-bold text-primary">{customer.totalOrders}</p>
-                  <p className="text-xs text-muted-foreground">Total de Pedidos</p>
-                </div>
-                <div>
-                  <p className="text-2xl font-bold text-emerald-600">
-                    R$ {customer.totalSpent.toFixed(2)}
-                  </p>
-                  <p className="text-xs text-muted-foreground">Total Gasto</p>
-                </div>
-                <div>
-                  <p className="text-2xl font-bold text-amber-600">
-                    R$ {customer.totalOrders > 0 ? (customer.totalSpent / customer.totalOrders).toFixed(2) : "0.00"}
-                  </p>
-                  <p className="text-xs text-muted-foreground">Ticket Médio</p>
+                <div className="grid grid-cols-3 gap-3 text-center">
+                  <div>
+                    <p className="text-2xl font-bold text-primary">{customer.totalOrders}</p>
+                    <p className="text-xs text-muted-foreground">Total de Pedidos</p>
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold text-emerald-600">
+                      R$ {customer.totalSpent.toFixed(2)}
+                    </p>
+                    <p className="text-xs text-muted-foreground">Total Gasto</p>
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold text-amber-600">
+                      R$ {customer.totalOrders > 0 ? (customer.totalSpent / customer.totalOrders).toFixed(2) : "0.00"}
+                    </p>
+                    <p className="text-xs text-muted-foreground">Ticket Médio</p>
+                  </div>
                 </div>
               </div>
             </div>
 
-            {/* Filters */}
-            <div className="flex flex-wrap gap-2">
-              {filterButtons.map((filter) => (
-                <Button
-                  key={filter.value}
-                  variant={statusFilter === filter.value ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setStatusFilter(filter.value)}
-                >
-                  {filter.label}
-                  <span className="ml-1.5 text-xs opacity-70">
-                    ({filter.value === "all" ? orders.length :
-                      filter.value === "delivered" ? orders.filter(o => o.status === "delivered").length :
-                      filter.value === "canceled" ? orders.filter(o => o.status === "canceled").length :
-                      orders.filter(o => o.status !== "delivered" && o.status !== "canceled").length
-                    })
-                  </span>
-                </Button>
-              ))}
-            </div>
-
-            {/* Orders List */}
-            {loading ? (
-              <div className="space-y-3">
-                {[1, 2, 3].map((i) => (
-                  <Skeleton key={i} className="h-32 w-full" />
+            {/* Filtros fixos */}
+            <div className="px-6 py-3 border-b shrink-0">
+              <div className="flex flex-wrap gap-2">
+                {filterButtons.map((filter) => (
+                  <Button
+                    key={filter.value}
+                    variant={statusFilter === filter.value ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setStatusFilter(filter.value)}
+                  >
+                    {filter.label}
+                    <span className="ml-1.5 text-xs opacity-70">
+                      ({filter.value === "all" ? orders.length :
+                        filter.value === "delivered" ? orders.filter(o => o.status === "delivered").length :
+                        filter.value === "canceled" ? orders.filter(o => o.status === "canceled").length :
+                        orders.filter(o => o.status !== "delivered" && o.status !== "canceled").length
+                      })
+                    </span>
+                  </Button>
                 ))}
               </div>
-            ) : filteredOrders.length === 0 ? (
-              <div className="text-center py-12 text-muted-foreground">
-                <ShoppingBag className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                <p>Nenhum pedido encontrado com este filtro</p>
-              </div>
-            ) : (
-              <ScrollArea className="max-h-[calc(100vh-400px)]">
-                <div className="space-y-3 pr-3">
+            </div>
+
+            {/* ÁREA SCROLLÁVEL — flex-1 + overflow-y-auto */}
+            <div className="flex-1 overflow-y-auto px-6 py-4">
+              {loading ? (
+                <div className="space-y-3">
+                  {[1, 2, 3].map((i) => (
+                    <Skeleton key={i} className="h-32 w-full" />
+                  ))}
+                </div>
+              ) : filteredOrders.length === 0 ? (
+                <div className="text-center py-12 text-muted-foreground">
+                  <ShoppingBag className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                  <p>Nenhum pedido encontrado com este filtro</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
                   {filteredOrders.map((order) => {
                     const items = Array.isArray(order.items) ? order.items : [];
 
@@ -269,9 +273,9 @@ export default function CustomerOrdersHistoryModal({
                     );
                   })}
                 </div>
-              </ScrollArea>
-            )}
-          </div>
+              )}
+            </div>
+          </>
         )}
       </SheetContent>
     </Sheet>
