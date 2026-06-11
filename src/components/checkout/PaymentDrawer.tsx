@@ -508,7 +508,6 @@ export function PaymentDrawer({
                   }}
                   className="h-12 text-base"
                   disabled={isSubmitting}
-                  autoFocus
                 />
                 {erroCpfCnpj && (
                   <p className="text-xs text-destructive">{erroCpfCnpj}</p>
