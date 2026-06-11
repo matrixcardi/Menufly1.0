@@ -1881,6 +1881,7 @@ export type Database = {
           delivery_method: string | null
           delivery_mode: string
           description: string | null
+          free_shipping_threshold: number | null
           ga_measurement_id: string | null
           google_review_link: string | null
           gtm_container_id: string | null
@@ -1949,6 +1950,7 @@ export type Database = {
           delivery_method?: string | null
           delivery_mode?: string
           description?: string | null
+          free_shipping_threshold?: number | null
           ga_measurement_id?: string | null
           google_review_link?: string | null
           gtm_container_id?: string | null
@@ -2017,6 +2019,7 @@ export type Database = {
           delivery_method?: string | null
           delivery_mode?: string
           description?: string | null
+          free_shipping_threshold?: number | null
           ga_measurement_id?: string | null
           google_review_link?: string | null
           gtm_container_id?: string | null

@@ -138,10 +138,8 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
       .single()
       .then(({ data, error }) => {
         if (!error && data) {
-          setRestaurantData(data as NonNullable<typeof restaurantData>);
+          setRestaurantData(data);
         }
-      })
-      .finally(() => {
         setLoadingRestaurant(false);
       });
 
@@ -357,6 +355,24 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
     scrollToSection(sectionId);
   };
 
+  // After the keyboard finishes opening (visualViewport resize), nudge the
+  // focused field into view with the minimum movement needed ("nearest"), so
+  // the user never loses their place in the form.
+  const handleFieldFocus = (e: React.FocusEvent<HTMLDivElement>) => {
+    const target = e.target as HTMLElement;
+    if (!/^(INPUT|SELECT|TEXTAREA)$/.test(target.tagName)) return;
+    const vv = window.visualViewport;
+    let settled = false;
+    const settle = () => {
+      if (settled) return;
+      settled = true;
+      vv?.removeEventListener("resize", settle);
+      target.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    };
+    vv?.addEventListener("resize", settle);
+    setTimeout(settle, 300);
+  };
+
   const handleSubmit = () => {
     setErrors({});
 
@@ -432,34 +448,16 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
     onOpenChange(false);
   };
 
-  // Reset form only when drawer closes AND payment drawer is not opening
+  // Keep everything the user typed between openings (back navigation, returning
+  // from payment, accidental close) — losing a half-filled address is the worst
+  // outcome. Only transient error states are cleared when the drawer opens.
   useEffect(() => {
-    if (!open && !showPaymentDrawer) {
-      setDeliveryMethod(null);
-      setSelectedCity("");
-      setSelectedZoneId("");
-      setAddress({ street: "", number: "", complement: "", reference: "", neighborhood: "" });
+    if (open) {
       setErrors({});
-      setUserLat(null);
-      setUserLng(null);
-      setDistanceKm(null);
-      setMatchedRadiusZone(null);
       setGeoError(null);
-      setCep("");
       setCepError(null);
-      setLocationSource(null);
-      setResolvedCity("");
-      setResolvedState("");
-      setResolvingAddress(false);
-      setNeighborhoodCep("");
-      setEnableScheduling(false);
-      setSelectedDate(null);
-      setSelectedSlot(null);
-      setAvailableSlots([]);
-      // Reset location mode only if user has a real choice; otherwise auto-select effect will refill it
-      if (hasBothModes) setLocationMode(null);
     }
-  }, [open, showPaymentDrawer, hasBothModes]);
+  }, [open]);
 
   // Check if scheduling is enabled for the selected delivery method
   const isSchedulingEnabled = deliveryMethod === "delivery" 
@@ -595,13 +593,17 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
 
   return (
     <>
-      <Drawer open={open} onOpenChange={onOpenChange}>
-        <DrawerContent className="max-h-[85dvh] max-w-md mx-auto" onOpenAutoFocus={(e) => e.preventDefault()}>
+      {/* dismissible=false: a long form is too easy to dismiss by accident with
+          a drag or an outside tap — the back arrow is the only way out. */}
+      <Drawer open={open} onOpenChange={onOpenChange} dismissible={false}>
+        <DrawerContent hideHandle className="max-h-[85dvh] max-w-md mx-auto" onOpenAutoFocus={(e) => e.preventDefault()}>
           <DrawerHeader className="border-b border-border px-4 py-3">
             <div className="flex items-center gap-3">
               <button
+                type="button"
+                aria-label="Voltar"
                 onClick={handleBack}
-                className="p-2 -ml-2 hover:bg-muted rounded-full transition-colors"
+                className="p-3 -ml-3 hover:bg-muted rounded-full transition-colors"
               >
                 <ArrowLeft className="w-5 h-5" />
               </button>
@@ -609,7 +611,10 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
             </div>
           </DrawerHeader>
 
-          <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-4 space-y-6 pb-2">
+          <div
+            className="flex-1 min-h-0 overflow-y-auto overscroll-contain scroll-pt-6 scroll-pb-32 p-4 space-y-6 pb-2"
+            onFocus={handleFieldFocus}
+          >
             {/* Customer Info Summary */}
             <div className="bg-muted/50 rounded-lg p-4">
               <p className="text-xs text-muted-foreground mb-1">Este pedido será entregue a:</p>
@@ -629,6 +634,10 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
                     onClick={() => {
                       setDeliveryMethod("delivery");
                       setErrors((prev) => ({ ...prev, deliveryMethod: "" }));
+                      // The address form mounts below the fold — bring it into view
+                      setTimeout(() => {
+                        document.getElementById("delivery-method-section")?.scrollIntoView({ behavior: "smooth", block: "start" });
+                      }, 150);
                     }}
                     className={`w-full flex items-center gap-4 p-4 rounded-lg border-2 transition-all ${
                       deliveryMethod === "delivery"
