@@ -386,8 +386,10 @@ export function PaymentDrawer({
         <DrawerHeader className="border-b border-border px-4 py-3">
           <div className="flex items-center gap-3">
             <button
+              type="button"
+              aria-label="Voltar"
               onClick={handleBack}
-              className="p-2 -ml-2 hover:bg-muted rounded-full transition-colors"
+              className="p-3 -ml-3 hover:bg-muted rounded-full transition-colors"
               disabled={isSubmitting}
             >
               <ArrowLeft className="w-5 h-5" />
