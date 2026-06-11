@@ -7,6 +7,7 @@ import { geocodeCep, reverseGeocode } from "@/lib/geocoding";
 import { format, addDays, parse, startOfDay, endOfDay } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useCart } from "@/contexts/CartContext";
+import { toast } from "sonner";
 import {
   Drawer,
   DrawerContent,
@@ -113,7 +114,8 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [showPaymentDrawer, setShowPaymentDrawer] = useState(false);
   // When both zone types exist, the user must pick which flow to use.
-  const [locationMode, setLocationMode] = useState<"radius" | "neighborhood" | null>(null);
+  // "none" = restaurant has no delivery zones configured (plain address form).
+  const [locationMode, setLocationMode] = useState<"radius" | "neighborhood" | "none" | null>(null);
 
   // Scheduling state
   const [schedulingConfig, setSchedulingConfig] = useState<any>(null);
@@ -247,8 +249,8 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
     setNeighborhoodCep(formatCep(value));
   };
 
-  const lookupCep = async () => {
-    const clean = cep.replace(/\D/g, "");
+  const lookupCep = async (rawCep?: string) => {
+    const clean = (rawCep ?? cep).replace(/\D/g, "");
     if (clean.length !== 8) {
       setCepError("CEP inválido");
       return;
@@ -341,65 +343,94 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
     setTimeout(() => onOpenChange(true), 300);
   };
 
+  // Smooth-scroll the drawer's inner scroll area to a section so the user
+  // sees which field blocked the submit. Body scroll is locked by the drawer,
+  // so scrollIntoView only moves the inner container.
+  const scrollToSection = (id: string) => {
+    requestAnimationFrame(() => {
+      document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+  };
+
+  const failValidation = (fieldErrors: Record<string, string>, sectionId: string) => {
+    setErrors(fieldErrors);
+    scrollToSection(sectionId);
+  };
+
   const handleSubmit = () => {
-    // Check minimum order for delivery
-    if (deliveryMethod === "delivery" && restaurantData?.min_order && subtotal < restaurantData.min_order) {
-      setErrors({ neighborhood: `Pedido mínimo para delivery: R$ ${restaurantData.min_order.toFixed(2)}` });
+    setErrors({});
+
+    if (!deliveryMethod) {
+      failValidation({ deliveryMethod: "Escolha como deseja receber seu pedido" }, "delivery-method-section");
+      return;
+    }
+
+    if (enableScheduling && (!selectedDate || !selectedSlot)) {
+      failValidation(
+        { scheduling: !selectedDate ? "Selecione a data do agendamento" : "Selecione o horário do agendamento" },
+        "scheduling-section"
+      );
       return;
     }
 
     if (deliveryMethod === "delivery") {
+      // Check minimum order for delivery
+      if (restaurantData?.min_order && subtotal < restaurantData.min_order) {
+        toast.error(`Pedido mínimo para delivery: R$ ${restaurantData.min_order.toFixed(2)}`);
+        return;
+      }
+
       if (!locationMode) {
-        setErrors({ neighborhood: "Selecione a forma de localização" });
+        failValidation({ locationMode: "Escolha como informar seu endereço" }, "location-mode-section");
         return;
       }
-      if (!isRadiusMode && !selectedZoneId) {
-        setErrors({ neighborhood: "Selecione o setor/bairro" });
-        return;
-      }
-      if (isRadiusMode && isOutOfRange) {
-        return;
-      }
-      if (isRadiusMode) {
-        if (address.street.trim().length < 3) {
-          setErrors({ street: "Informe a rua" });
+
+      if (locationMode === "radius") {
+        if (userLat === null || userLng === null) {
+          failValidation({ location: "Use sua localização ou informe o CEP para continuar" }, "radius-location-section");
           return;
         }
-        if (!address.number.trim()) {
-          setErrors({ number: "Número obrigatório" });
+        if (isOutOfRange) {
+          scrollToSection("out-of-range-banner");
           return;
         }
       }
-      if (!isRadiusMode) {
-        const result = addressSchema.safeParse(address);
-        if (!result.success) {
-          const fieldErrors: Record<string, string> = {};
-          result.error.errors.forEach((err) => {
-            const field = err.path[0] as string;
-            fieldErrors[field] = err.message;
-          });
-          setErrors(fieldErrors);
+
+      if (locationMode === "neighborhood") {
+        if (neighborhoodCep.replace(/\D/g, "").length !== 8) {
+          failValidation({ neighborhoodCep: "Informe um CEP válido" }, "neighborhood-cep-field");
           return;
         }
+        if (hasMultipleCities && !selectedCity) {
+          failValidation({ neighborhood: "Selecione sua cidade" }, "zone-select-field");
+          return;
+        }
+        if (!selectedZoneId) {
+          failValidation({ neighborhood: "Selecione o setor/bairro" }, "zone-select-field");
+          return;
+        }
+      }
+
+      const result = addressSchema.safeParse({
+        street: address.street.trim(),
+        number: address.number.trim(),
+      });
+      if (!result.success) {
+        const fieldErrors: Record<string, string> = {};
+        result.error.errors.forEach((err) => {
+          const field = err.path[0] as string;
+          fieldErrors[field] = err.message;
+        });
+        const firstField = result.error.errors[0]?.path[0] as string;
+        const fieldIdPrefix = locationMode === "radius" ? "radius-" : "";
+        failValidation(fieldErrors, `${fieldIdPrefix}${firstField}`);
+        return;
       }
     }
 
     setShowPaymentDrawer(true);
     onOpenChange(false);
   };
-
-  const isPickupValid = deliveryMethod === "pickup" && (restaurantData?.pickup_available !== false) && (!enableScheduling || (selectedDate && selectedSlot));
-  const isDeliveryValid = deliveryMethod === "delivery" && (restaurantData?.delivery_available !== false) && !!locationMode && (
-    locationMode === "none"
-      ? (address.street.length >= 3 && address.number.length >= 1)
-      : isRadiusMode
-        ? (userLat !== null && userLng !== null && !isOutOfRange && address.number.trim().length >= 1 && address.street.trim().length >= 3)
-        : (address.street.length >= 3 && address.number.length >= 1 && !!selectedZoneId && neighborhoodCep.replace(/\D/g, "").length === 8)
-  ) && (!enableScheduling || (selectedDate && selectedSlot));
-
-  const canProceed = isPickupValid || isDeliveryValid;
-
-  const hasDeliveryOption = hasRadiusZones || hasNeighborhoodZones;
 
   // Reset form only when drawer closes AND payment drawer is not opening
   useEffect(() => {
@@ -578,12 +609,7 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
             </div>
           </DrawerHeader>
 
-          <div className="flex-1 overflow-y-auto p-4 space-y-6 pb-2" onFocus={(e) => {
-            const target = e.target as HTMLElement;
-            if (target.tagName === 'INPUT' || target.tagName === 'SELECT') {
-              setTimeout(() => target.scrollIntoView({ behavior: 'smooth', block: 'center' }), 500);
-            }
-          }}>
+          <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-4 space-y-6 pb-2">
             {/* Customer Info Summary */}
             <div className="bg-muted/50 rounded-lg p-4">
               <p className="text-xs text-muted-foreground mb-1">Este pedido será entregue a:</p>
@@ -592,14 +618,18 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
             </div>
 
             {/* Delivery Method Selection */}
-            <div className="space-y-3">
+            <div id="delivery-method-section" className="space-y-3">
               <Label className="text-sm font-semibold">Como deseja receber seu pedido?</Label>
-              
+
               <div className="space-y-2">
                 {/* Delivery Option */}
                 {(restaurantData?.delivery_available !== false) && (
                   <button
-                    onClick={() => setDeliveryMethod("delivery")}
+                    type="button"
+                    onClick={() => {
+                      setDeliveryMethod("delivery");
+                      setErrors((prev) => ({ ...prev, deliveryMethod: "" }));
+                    }}
                     className={`w-full flex items-center gap-4 p-4 rounded-lg border-2 transition-all ${
                       deliveryMethod === "delivery"
                         ? "border-primary bg-primary/5"
@@ -628,7 +658,11 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
                 {/* Pickup Option */}
                 {(restaurantData?.pickup_available !== false) && (
                 <button
-                  onClick={() => setDeliveryMethod("pickup")}
+                  type="button"
+                  onClick={() => {
+                    setDeliveryMethod("pickup");
+                    setErrors((prev) => ({ ...prev, deliveryMethod: "" }));
+                  }}
                   className={`w-full flex items-start gap-4 p-4 rounded-lg border-2 transition-all ${
                     deliveryMethod === "pickup"
                       ? "border-primary bg-primary/5"
@@ -671,11 +705,14 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
                 </button>
                 )}
               </div>
+              {errors.deliveryMethod && (
+                <p className="text-xs text-destructive">{errors.deliveryMethod}</p>
+              )}
             </div>
 
             {/* Scheduling Toggle */}
             {deliveryMethod && isSchedulingEnabled && (
-              <div className="space-y-4 pt-4 border-t border-border">
+              <div id="scheduling-section" className="space-y-4 pt-4 border-t border-border">
                 <div className="flex items-center justify-between">
                   <div className="space-y-1">
                     <Label className="text-sm font-semibold">Agendar para depois</Label>
@@ -723,6 +760,7 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
                               onClick={() => {
                                 setSelectedDate(date);
                                 setSelectedSlot(null);
+                                setErrors((prev) => ({ ...prev, scheduling: "" }));
                               }}
                               className={`p-3 rounded-lg border-2 transition-all text-center ${
                                 isSelected
@@ -759,7 +797,11 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
                                 <button
                                   key={index}
                                   type="button"
-                                  onClick={() => isAvailable && setSelectedSlot(slot)}
+                                  onClick={() => {
+                                    if (!isAvailable) return;
+                                    setSelectedSlot(slot);
+                                    setErrors((prev) => ({ ...prev, scheduling: "" }));
+                                  }}
                                   disabled={!isAvailable}
                                   className={`p-3 rounded-lg border-2 transition-all text-center ${
                                     isSelected
@@ -785,6 +827,10 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
                     )}
                   </div>
                 )}
+
+                {errors.scheduling && (
+                  <p className="text-xs text-destructive">{errors.scheduling}</p>
+                )}
               </div>
             )}
 
@@ -793,12 +839,15 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
               <div className="space-y-4">
                 {/* Mode selector — only when admin enabled BOTH neighborhood and radius */}
                 {hasBothModes && (
-                  <div className="space-y-2">
+                  <div id="location-mode-section" className="space-y-2">
                     <Label className="text-sm font-semibold">Como informar seu endereço?</Label>
                     <div className="grid grid-cols-2 gap-2">
                       <button
                         type="button"
-                        onClick={() => setLocationMode("neighborhood")}
+                        onClick={() => {
+                          setLocationMode("neighborhood");
+                          setErrors((prev) => ({ ...prev, locationMode: "" }));
+                        }}
                         className={`flex items-center gap-2 p-3 rounded-lg border-2 transition-all text-left ${
                           locationMode === "neighborhood"
                             ? "border-primary bg-primary/5"
@@ -810,7 +859,10 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
                       </button>
                       <button
                         type="button"
-                        onClick={() => setLocationMode("radius")}
+                        onClick={() => {
+                          setLocationMode("radius");
+                          setErrors((prev) => ({ ...prev, locationMode: "" }));
+                        }}
                         className={`flex items-center gap-2 p-3 rounded-lg border-2 transition-all text-left ${
                           locationMode === "radius"
                             ? "border-primary bg-primary/5"
@@ -821,6 +873,9 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
                         <span className="text-sm font-medium">Usar GPS</span>
                       </button>
                     </div>
+                    {errors.locationMode && (
+                      <p className="text-xs text-destructive">{errors.locationMode}</p>
+                    )}
                   </div>
                 )}
 
@@ -835,6 +890,8 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
                       <Input
                         id="street"
                         type="text"
+                        autoComplete="address-line1"
+                        enterKeyHint="next"
                         placeholder="Nome da rua"
                         value={address.street}
                         onChange={handleInputChange("street")}
@@ -849,6 +906,7 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
                         <Input
                           id="number"
                           type="text"
+                          enterKeyHint="next"
                           placeholder="Nº"
                           value={address.number}
                           onChange={handleInputChange("number")}
@@ -861,6 +919,8 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
                         <Input
                           id="complement"
                           type="text"
+                          autoComplete="address-line2"
+                          enterKeyHint="next"
                           placeholder="Apto, bloco..."
                           value={address.complement}
                           onChange={handleInputChange("complement")}
@@ -874,6 +934,7 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
                       <Input
                         id="neighborhood"
                         type="text"
+                        enterKeyHint="next"
                         placeholder="Bairro"
                         value={address.neighborhood}
                         onChange={handleInputChange("neighborhood")}
@@ -886,6 +947,7 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
                       <Input
                         id="reference"
                         type="text"
+                        enterKeyHint="done"
                         placeholder="Próximo a..."
                         value={address.reference}
                         onChange={handleInputChange("reference")}
@@ -899,8 +961,9 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
                 {isRadiusMode && (
                   <>
                     {userLat === null ? (
-                      <div className="space-y-3">
+                      <div id="radius-location-section" className="space-y-3">
                         <Button
+                          type="button"
                           onClick={requestGeolocation}
                           disabled={geoLoading}
                           variant="outline"
@@ -916,6 +979,9 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
                         {geoError && (
                           <p className="text-xs text-destructive">{geoError}</p>
                         )}
+                        {errors.location && (
+                          <p className="text-xs text-destructive">{errors.location}</p>
+                        )}
                         <div className="flex items-center gap-3">
                           <div className="flex-1 h-px bg-border" />
                           <span className="text-xs text-muted-foreground">ou informe seu CEP</span>
@@ -928,13 +994,25 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
                               id="cep"
                               type="text"
                               inputMode="numeric"
+                              autoComplete="postal-code"
+                              enterKeyHint="search"
                               placeholder="00000-000"
                               value={cep}
-                              onChange={(e) => { setCep(formatCep(e.target.value)); setCepError(null); }}
+                              onChange={(e) => {
+                                const formatted = formatCep(e.target.value);
+                                setCep(formatted);
+                                setCepError(null);
+                                // Auto-lookup as soon as the CEP is complete, so the
+                                // user doesn't need to find the button under the keyboard
+                                if (formatted.replace(/\D/g, "").length === 8) {
+                                  lookupCep(formatted);
+                                }
+                              }}
                               className={`h-12 text-base ${cepError ? "border-destructive" : ""}`}
                             />
                             <Button
-                              onClick={lookupCep}
+                              type="button"
+                              onClick={() => lookupCep()}
                               disabled={cepLoading || cep.replace(/\D/g, "").length !== 8}
                               variant="outline"
                               className="h-12 px-4"
@@ -962,7 +1040,7 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
                         )}
 
                         {isOutOfRange && (
-                          <div className="p-3 rounded-lg border border-destructive/30 bg-destructive/5">
+                          <div id="out-of-range-banner" className="p-3 rounded-lg border border-destructive/30 bg-destructive/5">
                             <p className="text-sm text-destructive">
                               Infelizmente você está fora da área de entrega ({distanceKm?.toFixed(1)} km).
                               {maxRadius && <> Entregamos até {maxRadius} km.</>}
@@ -998,11 +1076,14 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
                               <Input
                                 id="radius-street"
                                 type="text"
+                                autoComplete="address-line1"
+                                enterKeyHint="next"
                                 placeholder="Nome da rua"
                                 value={address.street}
                                 onChange={handleInputChange("street")}
-                                className="h-12 text-base"
+                                className={`h-12 text-base ${errors.street ? "border-destructive" : ""}`}
                               />
+                              {errors.street && <p className="text-xs text-destructive">{errors.street}</p>}
                             </div>
 
                             <div className="space-y-2">
@@ -1010,6 +1091,7 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
                               <Input
                                 id="radius-neighborhood"
                                 type="text"
+                                enterKeyHint="next"
                                 placeholder="Bairro"
                                 value={address.neighborhood}
                                 onChange={handleInputChange("neighborhood")}
@@ -1023,6 +1105,7 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
                                 <Input
                                   id="radius-number"
                                   type="text"
+                                  enterKeyHint="next"
                                   placeholder="Nº"
                                   value={address.number}
                                   onChange={handleInputChange("number")}
@@ -1035,6 +1118,8 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
                                 <Input
                                   id="radius-complement"
                                   type="text"
+                                  autoComplete="address-line2"
+                                  enterKeyHint="next"
                                   placeholder="Apto, bloco..."
                                   value={address.complement}
                                   onChange={handleInputChange("complement")}
@@ -1048,6 +1133,7 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
                               <Input
                                 id="radius-reference"
                                 type="text"
+                                enterKeyHint="done"
                                 placeholder="Próximo a..."
                                 value={address.reference}
                                 onChange={handleInputChange("reference")}
@@ -1063,21 +1149,29 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
                 )}
 
                 {/* ─── Zones Mode: City + Neighborhood selects ─── */}
-                {!isRadiusMode && (
+                {locationMode === "neighborhood" && (
                   <>
                     {/* CEP Field — first and triggers auto-fill */}
-                    <div className="space-y-2">
+                    <div id="neighborhood-cep-field" className="space-y-2">
                       <Label htmlFor="neighborhood-cep" className="text-sm font-medium">CEP *</Label>
                       <Input
                         id="neighborhood-cep"
                         type="text"
                         inputMode="numeric"
+                        autoComplete="postal-code"
+                        enterKeyHint="next"
                         placeholder="00000-000"
                         value={neighborhoodCep}
-                        onChange={(e) => handleNeighborhoodCepChange(e.target.value)}
+                        onChange={(e) => {
+                          handleNeighborhoodCepChange(e.target.value);
+                          setErrors((prev) => ({ ...prev, neighborhoodCep: "" }));
+                        }}
                         maxLength={9}
-                        className="h-12 text-base"
+                        className={`h-12 text-base ${errors.neighborhoodCep ? "border-destructive" : ""}`}
                       />
+                      {errors.neighborhoodCep && (
+                        <p className="text-xs text-destructive">{errors.neighborhoodCep}</p>
+                      )}
                     </div>
 
                     {hasMultipleCities && (
@@ -1102,12 +1196,15 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
                       </div>
                     )}
 
-                    <div className="space-y-2">
+                    <div id="zone-select-field" className="space-y-2">
                       <Label className="text-sm font-medium">Setor/Bairro *</Label>
                       <div className="relative">
                         <select
                           value={selectedZoneId}
-                          onChange={(e) => setSelectedZoneId(e.target.value)}
+                          onChange={(e) => {
+                            setSelectedZoneId(e.target.value);
+                            setErrors((prev) => ({ ...prev, neighborhood: "" }));
+                          }}
                           disabled={hasMultipleCities && !selectedCity}
                           className="w-full h-12 text-base rounded-md border border-input bg-background px-3 pr-10 appearance-none focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
                         >
@@ -1139,7 +1236,7 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
                   </>
                 )}
 
-                {!isRadiusMode && (
+                {locationMode === "neighborhood" && (
                   <>
                     {/* Street Field */}
                     <div className="space-y-2">
@@ -1147,6 +1244,8 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
                       <Input
                         id="street"
                         type="text"
+                        autoComplete="address-line1"
+                        enterKeyHint="next"
                         placeholder="Nome da rua"
                         value={address.street}
                         onChange={handleInputChange("street")}
@@ -1162,6 +1261,7 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
                         <Input
                           id="number"
                           type="text"
+                          enterKeyHint="next"
                           placeholder="Nº"
                           value={address.number}
                           onChange={handleInputChange("number")}
@@ -1174,6 +1274,8 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
                         <Input
                           id="complement"
                           type="text"
+                          autoComplete="address-line2"
+                          enterKeyHint="next"
                           placeholder="Apto, bloco..."
                           value={address.complement}
                           onChange={handleInputChange("complement")}
@@ -1188,6 +1290,7 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
                       <Input
                         id="reference"
                         type="text"
+                        enterKeyHint="done"
                         placeholder="Próximo a..."
                         value={address.reference}
                         onChange={handleInputChange("reference")}
@@ -1206,8 +1309,7 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
           <div className="p-4 border-t border-border safe-area-bottom">
             <Button
               onClick={handleSubmit}
-              disabled={!canProceed}
-              className="w-full h-12 text-base font-bold bg-primary hover:bg-primary/90 disabled:opacity-50"
+              className="w-full h-12 text-base font-bold bg-primary hover:bg-primary/90"
             >
             Continuar para pagamento
             </Button>
