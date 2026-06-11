@@ -75,17 +75,17 @@ const PasswordResetHandler = ({ children }: { children: React.ReactNode }) => {
   const location = useLocation();
 
   useEffect(() => {
-    // Check if URL contains password recovery token
     const hash = location.hash;
-    if (hash) {
-      const params = new URLSearchParams(hash.substring(1));
-      const accessToken = params.get("access_token");
-      const type = params.get("type");
+    if (!hash) return;
 
-      if (accessToken && type === "recovery") {
-        // Redirect to reset password page
-        navigate("/admin/reset-password", { replace: true });
-      }
+    const params = new URLSearchParams(hash.substring(1));
+    const accessToken = params.get("access_token");
+    const type = params.get("type");
+
+    // Only redirect if we're NOT already on the reset page — preserving the hash
+    // so the Supabase SDK can process the token and fire PASSWORD_RECOVERY.
+    if (accessToken && type === "recovery" && !location.pathname.startsWith("/admin/reset-password")) {
+      navigate(`/admin/reset-password${hash}`, { replace: true });
     }
   }, [location, navigate]);
 

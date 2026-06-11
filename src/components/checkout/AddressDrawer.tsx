@@ -135,10 +135,7 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
       .eq("id", restaurantId)
       .single()
       .then(({ data, error }) => {
-        if (error) {
-          console.error("Error loading restaurant data:", error);
-        } else if (data) {
-          console.log("Restaurant data loaded:", data);
+        if (!error && data) {
           setRestaurantData(data as NonNullable<typeof restaurantData>);
         }
       })
@@ -402,24 +399,6 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
 
   const canProceed = isPickupValid || isDeliveryValid;
 
-  console.log("=== VALIDATION DEBUG ===");
-  console.log("deliveryMethod:", deliveryMethod);
-  console.log("pickup_available:", restaurantData?.pickup_available);
-  console.log("delivery_available:", restaurantData?.delivery_available);
-  console.log("enableScheduling:", enableScheduling);
-  console.log("selectedDate:", selectedDate);
-  console.log("selectedSlot:", selectedSlot);
-  console.log("locationMode:", locationMode);
-  console.log("isRadiusMode:", isRadiusMode);
-  console.log("userLat:", userLat);
-  console.log("userLng:", userLng);
-  console.log("isOutOfRange:", isOutOfRange);
-  console.log("address.street:", address.street);
-  console.log("address.number:", address.number);
-  console.log("selectedZoneId:", selectedZoneId);
-  console.log("isPickupValid:", isPickupValid);
-  console.log("isDeliveryValid:", isDeliveryValid);
-  console.log("canProceed:", canProceed);
   const hasDeliveryOption = hasRadiusZones || hasNeighborhoodZones;
 
   // Reset form only when drawer closes AND payment drawer is not opening
@@ -461,13 +440,7 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
   // Load available slots when date is selected
   useEffect(() => {
     async function loadSlots() {
-      console.log("=== LOAD SLOTS START ===");
-      console.log("selectedDate:", selectedDate);
-      console.log("restaurantId:", restaurantId);
-      console.log("schedulingConfig:", schedulingConfig);
-
       if (!selectedDate || !restaurantId || !schedulingConfig) {
-        console.log("Missing required data, returning empty slots");
         setAvailableSlots([]);
         return;
       }
@@ -477,9 +450,6 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
         const dayStart = startOfDay(selectedDate);
         const dayEnd = endOfDay(selectedDate);
 
-        console.log("dayStart:", dayStart.toISOString());
-        console.log("dayEnd:", dayEnd.toISOString());
-
         // Get blocked slots
         const { data: blockedData } = await supabase
           .from("scheduling_blocked_slots" as any)
@@ -487,8 +457,6 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
           .eq("restaurant_id", restaurantId)
           .gte("blocked_at", dayStart.toISOString())
           .lte("blocked_at", dayEnd.toISOString());
-
-        console.log("blockedData:", blockedData);
 
         const blockedTimes = new Set(
           (blockedData || []).map((b: any) => new Date(b.blocked_at).getTime())
@@ -503,8 +471,6 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
           .gte("scheduled_at", dayStart.toISOString())
           .lte("scheduled_at", dayEnd.toISOString());
 
-        console.log("ordersData:", ordersData);
-
         // Count orders per slot
         const slotCounts = new Map<number, number>();
         (ordersData || []).forEach((order: any) => {
@@ -513,8 +479,6 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
             slotCounts.set(time, (slotCounts.get(time) || 0) + 1);
           }
         });
-
-        console.log("slotCounts:", slotCounts);
 
         // Generate slots based on config
         // Use America/Sao_Paulo timezone for day calculation
@@ -530,16 +494,9 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
                       dayOfWeekInBrasilia === "sexta-feira" ? "friday" :
                       dayOfWeekInBrasilia === "sábado" ? "saturday" : "sunday";
 
-        console.log("dayOfWeek (pt-BR, America/Sao_Paulo):", dayOfWeekInBrasilia);
-        console.log("dayKey:", dayKey);
-        console.log("schedulingConfig.schedule:", schedulingConfig.schedule);
-
         const daySchedule = schedulingConfig.schedule?.[dayKey];
 
-        console.log("daySchedule:", daySchedule);
-
         if (!daySchedule || !daySchedule.enabled) {
-          console.log("Day schedule not found or not enabled");
           setAvailableSlots([]);
           setLoadingSlots(false);
           return;
@@ -549,11 +506,6 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
         const endTime = parse(daySchedule.end, "HH:mm", selectedDate);
         const intervalMinutes = schedulingConfig.slot_interval_minutes || 30;
         const maxOrders = schedulingConfig.max_orders_per_slot || 5;
-
-        console.log("startTime:", startTime);
-        console.log("endTime:", endTime);
-        console.log("intervalMinutes:", intervalMinutes);
-        console.log("maxOrders:", maxOrders);
 
         const slots: Array<{ start: Date; end: Date; available: number }> = [];
         let currentStart = startTime;
@@ -573,8 +525,6 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
           currentStart = currentEnd;
         }
 
-        console.log("Generated slots:", slots);
-        console.log("Slots count:", slots.length);
         setAvailableSlots(slots);
       } catch (error) {
         console.error("Error loading slots:", error);
@@ -631,7 +581,7 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
           <div className="flex-1 overflow-y-auto p-4 space-y-6 pb-2" onFocus={(e) => {
             const target = e.target as HTMLElement;
             if (target.tagName === 'INPUT' || target.tagName === 'SELECT') {
-              setTimeout(() => target.scrollIntoView({ behavior: 'smooth', block: 'center' }), 300);
+              setTimeout(() => target.scrollIntoView({ behavior: 'smooth', block: 'center' }), 500);
             }
           }}>
             {/* Customer Info Summary */}
@@ -780,7 +730,7 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
                                   : "border-border hover:border-muted-foreground/50"
                               }`}
                             >
-                              <p className="text-xs text-muted-foreground">{dayOfWeek}</p>
+                              <p className="text-xs text-muted-foreground capitalize">{dayOfWeek.slice(0, 3)}</p>
                               <p className="font-semibold">{format(date, "dd/MM")}</p>
                             </button>
                           );

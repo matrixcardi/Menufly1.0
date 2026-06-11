@@ -32,25 +32,16 @@ export default function AdminAuth() {
       // Evita "2 contas conectadas", tokens corrompidos e contaminação de localStorage.
       await performCleanSignOut();
 
-      console.log("[DEBUG] Tentando login com:", { email, loginMode });
-
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
 
-      console.log("[DEBUG] Resultado do login:", { data, error });
-
       if (error) {
-        console.log("[DEBUG] Erro do Supabase Auth:", error.message);
         throw error;
       }
 
-      console.log("[DEBUG] Usuário autenticado:", data.user.id);
-
       if (loginMode === "collaborator") {
-        // Verify collaborator role
-        console.log("[DEBUG] Verificando role de colaborador para user_id:", data.user.id);
         const { data: role, error: roleError } = await supabase
           .from("user_roles")
           .select("role")
@@ -58,10 +49,9 @@ export default function AdminAuth() {
           .eq("role", "collaborator")
           .maybeSingle();
 
-        console.log("[DEBUG] Resultado da verificação de role:", { role, roleError });
+        if (roleError) throw roleError;
 
         if (!role) {
-          console.log("[DEBUG] Role de colaborador não encontrado");
           await supabase.auth.signOut();
           clearLocalAuthState();
           throw new Error("Esta conta não possui acesso de colaborador.");
@@ -85,7 +75,6 @@ export default function AdminAuth() {
 
       navigate("/admin");
     } catch (error: unknown) {
-      console.log("[DEBUG] Erro no login:", error);
       const translatedError = translateError(error);
       toast({
         title: "Erro no login",

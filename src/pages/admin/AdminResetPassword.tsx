@@ -19,16 +19,10 @@ export default function AdminResetPassword() {
   const { toast } = useToast();
 
   useEffect(() => {
-    // Listen for the PASSWORD_RECOVERY event from the URL token
+    // Only mark ready on PASSWORD_RECOVERY — never on a regular existing session,
+    // to prevent unauthenticated users or already-logged-in users from bypassing the token.
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
       if (event === "PASSWORD_RECOVERY") {
-        setSessionReady(true);
-      }
-    });
-
-    // Also check if we already have a session (user clicked link and was auto-logged in)
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) {
         setSessionReady(true);
       }
     });

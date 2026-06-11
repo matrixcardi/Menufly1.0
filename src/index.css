@@ -1,8 +1,8 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
 
 @layer base {
   :root {
@@ -256,4 +256,9 @@ input, textarea, select {
 [vaul-drawer] textarea {
   font-size: 16px !important;
   -webkit-text-size-adjust: 100%;
+}
+
+/* Safe area padding for iPhone home indicator */
+.safe-area-bottom {
+  padding-bottom: max(1rem, env(safe-area-inset-bottom));
 }

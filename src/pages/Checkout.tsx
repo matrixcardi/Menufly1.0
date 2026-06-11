@@ -93,7 +93,6 @@ export default function Checkout() {
   }, []);
 
   const loadCheckout = useCallback(async (planToLoad: PlanType, withImplementation: boolean) => {
-    console.log("[Checkout] loadCheckout called", { planToLoad, isAuthenticated, withImplementation });
     if (!isAuthenticated) return;
 
     setCheckoutLoading(true);
@@ -105,8 +104,6 @@ export default function Checkout() {
       const { data, error } = await supabase.functions.invoke("create-checkout", {
         body: { plan: planToLoad, includeImplementation: withImplementation },
       });
-
-      console.log("[Checkout] Edge function response", { data, error });
 
       if (error) throw error;
       if (!data?.clientSecret || !data?.publishableKey) {
@@ -199,7 +196,7 @@ export default function Checkout() {
             <img
               src={checkoutBanner}
               alt="Painel MenuFly - sistema de gestão delivery"
-              className="w-full h-auto rounded-xl shadow-2xl border border-white/10"
+              className="w-full h-auto max-h-48 md:max-h-none object-cover rounded-xl shadow-2xl border border-white/10"
             />
           </div>
         </div>
@@ -325,7 +322,7 @@ export default function Checkout() {
         {/* Inline Checkout + Highlights */}
         <div className="grid lg:grid-cols-2 gap-6 max-w-6xl mx-auto">
           {/* Checkout section */}
-          <motion.div ref={checkoutRef} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }} className="order-1">
+          <motion.div ref={checkoutRef} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }} className="order-1 scroll-mt-20">
             <div className="bg-card border rounded-2xl overflow-hidden">
               <div className="p-5 border-b">
                 <h2 className="text-lg font-semibold">Finalizar Assinatura</h2>
@@ -370,7 +367,7 @@ export default function Checkout() {
                 )}
               </div>
 
-              <div className="p-5">
+              <div className="p-5 min-h-[420px]">
                 {/* Card: Loading checkout */}
                 {paymentMethod === "card" && checkoutLoading && (
                   <div className="flex flex-col items-center justify-center py-12 gap-3">
@@ -391,7 +388,7 @@ export default function Checkout() {
 
                 {/* Card: Embedded Stripe Checkout */}
                 {paymentMethod === "card" && checkoutData && !checkoutLoading && (
-                  <div className="rounded-xl overflow-hidden">
+                  <div className="rounded-xl">
                     <EmbeddedCheckoutProvider
                       stripe={checkoutData.stripePromise}
                       options={{ clientSecret: checkoutData.clientSecret }}
