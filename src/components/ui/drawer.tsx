@@ -3,8 +3,8 @@ import { Drawer as DrawerPrimitive } from "vaul";
 
 import { cn } from "@/lib/utils";
 
-const Drawer = ({ shouldScaleBackground = true, ...props }: React.ComponentProps<typeof DrawerPrimitive.Root>) => (
-  <DrawerPrimitive.Root shouldScaleBackground={shouldScaleBackground} {...props} />
+const Drawer = ({ shouldScaleBackground = true, repositionInputs = true, ...props }: React.ComponentProps<typeof DrawerPrimitive.Root>) => (
+  <DrawerPrimitive.Root shouldScaleBackground={shouldScaleBackground} repositionInputs={repositionInputs} {...props} />
 );
 Drawer.displayName = "Drawer";
 
@@ -30,50 +30,11 @@ const DrawerContent = React.forwardRef<
   React.ElementRef<typeof DrawerPrimitive.Content>,
   DrawerContentProps
 >(({ className, children, hideHandle = false, style, ...props }, ref) => {
-  const innerRef = React.useRef<HTMLDivElement | null>(null);
-  const setRefs = React.useCallback(
-    (node: HTMLDivElement | null) => {
-      innerRef.current = node;
-      if (typeof ref === "function") ref(node);
-      else if (ref) (ref as React.MutableRefObject<HTMLDivElement | null>).current = node;
-    },
-    [ref],
-  );
-
-  // Adjust max-height to the actually visible viewport when the on-screen
-  // keyboard opens. iOS/Android Safari/Chrome do NOT shrink `dvh` when the
-  // virtual keyboard appears, so without this the drawer extends behind the
-  // keyboard and the inner CTA gets visually clipped.
-  React.useEffect(() => {
-    const vv = typeof window !== "undefined" ? window.visualViewport : null;
-    if (!vv) return;
-
-    const apply = () => {
-      const node = innerRef.current;
-      if (!node) return;
-      const keyboardOpen = window.innerHeight - vv.height > 100;
-      if (keyboardOpen) {
-        // Constrain to actually visible area minus a small gap for the handle.
-        node.style.maxHeight = `${Math.floor(vv.height) - 8}px`;
-      } else {
-        node.style.maxHeight = "";
-      }
-    };
-
-    apply();
-    vv.addEventListener("resize", apply);
-    vv.addEventListener("scroll", apply);
-    return () => {
-      vv.removeEventListener("resize", apply);
-      vv.removeEventListener("scroll", apply);
-    };
-  }, []);
-
   return (
     <DrawerPortal>
       <DrawerOverlay />
       <DrawerPrimitive.Content
-        ref={setRefs}
+        ref={ref}
         className={cn(
           "fixed inset-x-0 bottom-0 z-50 mt-24 flex h-auto flex-col rounded-t-[10px] border bg-background",
           className,

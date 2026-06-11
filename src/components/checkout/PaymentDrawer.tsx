@@ -60,6 +60,7 @@ export function PaymentDrawer({
   const navigate = useNavigate();
   const { items, coupon, subtotal, discount, total, clearCart, activeBenefits, hasFreeShipping } = useCart();
   const [selectedMethod, setSelectedMethod] = useState<PaymentMethodType>(null);
+  const [methodError, setMethodError] = useState("");
   const [cashChange, setCashChange] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [pixEnabled, setPixEnabled] = useState(false);
@@ -111,11 +112,24 @@ export function PaymentDrawer({
     setTimeout(onBack, 300);
   };
 
+  const scrollToSection = (id: string) => {
+    requestAnimationFrame(() => {
+      document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+  };
+
   const handleSubmit = async () => {
-    // Validate CPF/CNPJ if toggle is enabled
-    if (incluirCpf && cpfCnpj) {
+    if (!selectedMethod) {
+      setMethodError("Selecione a forma de pagamento");
+      scrollToSection("payment-methods-section");
+      return;
+    }
+
+    // Toggle on means the customer wants the document on the receipt — require a valid one
+    if (incluirCpf) {
       if (!validateCpfCnpj(cpfCnpj)) {
-        setErroCpfCnpj('CPF/CNPJ inválido');
+        setErroCpfCnpj(cpfCnpj ? 'CPF/CNPJ inválido' : 'Informe o CPF ou CNPJ');
+        scrollToSection("cpf-section");
         return;
       }
       setErroCpfCnpj('');
@@ -304,11 +318,10 @@ export function PaymentDrawer({
     }
   };
 
-  const canProceed = selectedMethod !== null && !isSubmitting;
-
   useEffect(() => {
     if (!open) {
       setSelectedMethod(null);
+      setMethodError("");
       setCashChange("");
       setIncluirCpf(false);
       setCpfCnpj('');
@@ -341,7 +354,11 @@ export function PaymentDrawer({
   const renderMethodButton = (method: { key: PaymentMethodType; label: string; icon: React.ReactNode }) => (
     <button
       key={method.key}
-      onClick={() => setSelectedMethod(method.key)}
+      type="button"
+      onClick={() => {
+        setSelectedMethod(method.key);
+        setMethodError("");
+      }}
       disabled={isSubmitting}
       className={`flex flex-col items-center gap-2 p-4 rounded-lg border-2 transition-all ${
         selectedMethod === method.key
@@ -379,8 +396,8 @@ export function PaymentDrawer({
           </div>
         </DrawerHeader>
 
-        <div className="flex-1 overflow-y-auto p-4 space-y-6">
-          <div className="space-y-4">
+        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-4 space-y-6">
+          <div id="payment-methods-section" className="space-y-4">
             {hasDeliveryMethods && (
               <div className="space-y-3">
                 <Label className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
@@ -404,6 +421,10 @@ export function PaymentDrawer({
               </div>
             )}
 
+            {methodError && (
+              <p className="text-xs text-destructive">{methodError}</p>
+            )}
+
             {/* Cash Change Field */}
             {selectedMethod === "cash" && (
               <div className="space-y-2 pt-2">
@@ -414,6 +435,7 @@ export function PaymentDrawer({
                   id="change"
                   type="text"
                   inputMode="numeric"
+                  enterKeyHint="done"
                   placeholder="Ex: R$ 100,00 (deixe vazio se não precisar)"
                   value={cashChange}
                   onChange={(e) => setCashChange(e.target.value)}
@@ -469,7 +491,7 @@ export function PaymentDrawer({
           </div>
 
           {/* CPF/CNPJ na nota */}
-          <div className="space-y-3 pt-2">
+          <div id="cpf-section" className="space-y-3 pt-2">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <FileText className="w-4 h-4 text-muted-foreground" />
@@ -499,6 +521,7 @@ export function PaymentDrawer({
                   id="cpf-input"
                   type="text"
                   inputMode="numeric"
+                  enterKeyHint="done"
                   placeholder="000.000.000-00"
                   value={cpfCnpj}
                   onChange={(e) => {
@@ -521,7 +544,7 @@ export function PaymentDrawer({
         <div className="p-4 border-t border-border safe-area-bottom">
           <Button
             onClick={handleSubmit}
-            disabled={!canProceed}
+            disabled={isSubmitting}
             className="w-full h-12 text-base font-bold bg-primary hover:bg-primary/90 disabled:opacity-50"
           >
             {isSubmitting ? (

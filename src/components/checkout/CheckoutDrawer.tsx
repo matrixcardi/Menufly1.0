@@ -96,8 +96,6 @@ export function CheckoutDrawer({ open, onOpenChange, onBack, restaurantId, resta
     setTimeout(() => onOpenChange(true), 300);
   };
 
-  const isValid = validatePhone(phone).valid && validateName(name).valid;
-
   return (
     <>
       <Drawer open={open} onOpenChange={onOpenChange}>
@@ -114,63 +112,80 @@ export function CheckoutDrawer({ open, onOpenChange, onBack, restaurantId, resta
             </div>
           </DrawerHeader>
 
-          <div className="p-6 space-y-6">
-            {/* WhatsApp Field */}
-            <div className="space-y-2">
-              <Label htmlFor="phone" className="text-sm font-medium text-foreground">
-                Seu número de WhatsApp é:
-              </Label>
-              <Input
-                id="phone"
-                type="tel"
-                inputMode="numeric"
-                placeholder="(__) _____-____"
-                value={phone}
-                onChange={handlePhoneChange}
-                className={`h-12 text-base ${errors.phone ? "border-destructive" : ""}`}
-              />
-              {errors.phone && (
-                <p className="text-xs text-destructive">{errors.phone}</p>
-              )}
+          <form
+            className="flex flex-1 min-h-0 flex-col"
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleSubmit();
+            }}
+          >
+            <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-6 space-y-6">
+              {/* WhatsApp Field */}
+              <div className="space-y-2">
+                <Label htmlFor="phone" className="text-sm font-medium text-foreground">
+                  Seu número de WhatsApp é:
+                </Label>
+                <Input
+                  id="phone"
+                  type="tel"
+                  inputMode="numeric"
+                  autoComplete="tel-national"
+                  enterKeyHint="next"
+                  placeholder="(__) _____-____"
+                  value={phone}
+                  onChange={handlePhoneChange}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      document.getElementById("name")?.focus();
+                    }
+                  }}
+                  className={`h-12 text-base ${errors.phone ? "border-destructive" : ""}`}
+                />
+                {errors.phone && (
+                  <p className="text-xs text-destructive">{errors.phone}</p>
+                )}
+              </div>
+
+              {/* Name Field */}
+              <div className="space-y-2">
+                <Label htmlFor="name" className="text-sm font-medium text-foreground">
+                  Seu nome e sobrenome:
+                </Label>
+                <Input
+                  id="name"
+                  type="text"
+                  autoComplete="name"
+                  enterKeyHint="done"
+                  placeholder="Nome e sobrenome"
+                  value={name}
+                  onChange={handleNameChange}
+                  maxLength={100}
+                  className={`h-12 text-base ${errors.name ? "border-destructive" : ""}`}
+                />
+                {errors.name && (
+                  <p className="text-xs text-destructive">{errors.name}</p>
+                )}
+              </div>
             </div>
 
-            {/* Name Field */}
-            <div className="space-y-2">
-              <Label htmlFor="name" className="text-sm font-medium text-foreground">
-                Seu nome e sobrenome:
-              </Label>
-              <Input
-                id="name"
-                type="text"
-                placeholder="Nome e sobrenome"
-                value={name}
-                onChange={handleNameChange}
-                maxLength={100}
-                className={`h-12 text-base ${errors.name ? "border-destructive" : ""}`}
-              />
-              {errors.name && (
-                <p className="text-xs text-destructive">{errors.name}</p>
-              )}
-            </div>
-          </div>
+            {/* Footer */}
+            <div className="p-6 pt-4 space-y-4 safe-area-bottom">
+              <Button
+                type="submit"
+                className="w-full h-12 text-base font-bold bg-primary hover:bg-primary/90 disabled:opacity-50"
+              >
+                Avançar
+              </Button>
 
-          {/* Footer */}
-          <div className="p-6 pt-0 space-y-4 safe-area-bottom">
-            <Button
-              onClick={handleSubmit}
-              disabled={!isValid}
-              className="w-full h-12 text-base font-bold bg-primary hover:bg-primary/90 disabled:opacity-50"
-            >
-              Avançar
-            </Button>
-
-            <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground text-center">
-              <Shield className="w-4 h-4 text-primary" />
-              <span>
-                Para realizar seu pedido vamos precisar de suas informações, este é um ambiente protegido.
-              </span>
+              <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground text-center">
+                <Shield className="w-4 h-4 text-primary" />
+                <span>
+                  Para realizar seu pedido vamos precisar de suas informações, este é um ambiente protegido.
+                </span>
+              </div>
             </div>
-          </div>
+          </form>
         </DrawerContent>
       </Drawer>
 
