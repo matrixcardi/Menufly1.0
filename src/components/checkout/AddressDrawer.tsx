@@ -1,9 +1,12 @@
 import { useState, useEffect, useMemo } from "react";
-import { ArrowLeft, MapPin, Store, ChevronDown, Loader2, Radar, Navigation, Calendar, Clock } from "lucide-react";
+// GPS — Radar e Navigation serão reativados futuramente
+import { ArrowLeft, MapPin, Store, ChevronDown, Loader2, Clock } from "lucide-react";
+// import { Radar, Navigation } from "lucide-react";
 import { z } from "zod";
 import { supabase } from "@/integrations/supabase/client";
-import { haversineDistanceKm } from "@/lib/haversine";
-import { geocodeCep, reverseGeocode } from "@/lib/geocoding";
+// GPS — será implementado futuramente
+// import { haversineDistanceKm } from "@/lib/haversine";
+// import { geocodeCep, reverseGeocode } from "@/lib/geocoding";
 import { format, addDays, parse, startOfDay, endOfDay } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useCart } from "@/contexts/CartContext";
@@ -50,6 +53,20 @@ interface AddressData {
   neighborhood: string;
 }
 
+interface DaySchedule {
+  enabled: boolean;
+  start: string;
+  end: string;
+}
+
+interface SchedulingConfig {
+  enabled_delivery: boolean;
+  enabled_pickup: boolean;
+  schedule: Record<string, DaySchedule>;
+  slot_interval_minutes: number;
+  max_orders_per_slot: number;
+}
+
 const addressSchema = z.object({
   street: z.string().min(3, "Rua inválida"),
   number: z.string().min(1, "Número obrigatório"),
@@ -86,20 +103,20 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
   const [selectedZoneId, setSelectedZoneId] = useState("");
   const [loadingRestaurant, setLoadingRestaurant] = useState(false);
 
-  // Radius mode state
-  const [geoLoading, setGeoLoading] = useState(false);
-  const [geoError, setGeoError] = useState<string | null>(null);
-  const [userLat, setUserLat] = useState<number | null>(null);
-  const [userLng, setUserLng] = useState<number | null>(null);
-  const [distanceKm, setDistanceKm] = useState<number | null>(null);
-  const [matchedRadiusZone, setMatchedRadiusZone] = useState<DeliveryZone | null>(null);
-  const [cep, setCep] = useState("");
-  const [cepLoading, setCepLoading] = useState(false);
-  const [cepError, setCepError] = useState<string | null>(null);
-  const [locationSource, setLocationSource] = useState<"gps" | "cep" | null>(null);
-  const [resolvingAddress, setResolvingAddress] = useState(false);
-  const [resolvedCity, setResolvedCity] = useState<string>("");
-  const [resolvedState, setResolvedState] = useState<string>("");
+  // GPS/Radius mode — será implementado futuramente
+  // const [geoLoading, setGeoLoading] = useState(false);
+  // const [geoError, setGeoError] = useState<string | null>(null);
+  // const [userLat, setUserLat] = useState<number | null>(null);
+  // const [userLng, setUserLng] = useState<number | null>(null);
+  // const [distanceKm, setDistanceKm] = useState<number | null>(null);
+  // const [matchedRadiusZone, setMatchedRadiusZone] = useState<DeliveryZone | null>(null);
+  // const [cep, setCep] = useState("");
+  // const [cepLoading, setCepLoading] = useState(false);
+  // const [cepError, setCepError] = useState<string | null>(null);
+  // const [locationSource, setLocationSource] = useState<"gps" | "cep" | null>(null);
+  // const [resolvingAddress, setResolvingAddress] = useState(false);
+  // const [resolvedCity, setResolvedCity] = useState<string>("");
+  // const [resolvedState, setResolvedState] = useState<string>("");
 
   // Neighborhood mode CEP state
   const [neighborhoodCep, setNeighborhoodCep] = useState("");
@@ -118,7 +135,7 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
   const [locationMode, setLocationMode] = useState<"radius" | "neighborhood" | "none" | null>(null);
 
   // Scheduling state
-  const [schedulingConfig, setSchedulingConfig] = useState<any>(null);
+  const [schedulingConfig, setSchedulingConfig] = useState<SchedulingConfig | null>(null);
   const [enableScheduling, setEnableScheduling] = useState(false);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [selectedSlot, setSelectedSlot] = useState<{ start: Date; end: Date } | null>(null);
@@ -154,42 +171,39 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
         if (data) setZones(data as DeliveryZone[]);
       });
 
-    // Load scheduling config
-    supabase
-      .from("scheduling_config" as any)
+    // Load scheduling config — tabela fora do schema gerado, cast explícito necessário
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (supabase as any)
+      .from("scheduling_config")
       .select("*")
       .eq("restaurant_id", restaurantId)
       .single()
-      .then(({ data }) => {
+      .then(({ data }: { data: SchedulingConfig | null }) => {
         if (data) setSchedulingConfig(data);
       });
   }, [restaurantId]);
 
   // Neighborhood zones
   const neighborhoodZones = useMemo(() => zones.filter(z => z.zone_type === "neighborhood"), [zones]);
-  const radiusZones = useMemo(() => zones.filter(z => z.zone_type === "radius").sort((a, b) => (a.min_radius_km || 0) - (b.min_radius_km || 0)), [zones]);
+  // GPS/Radius — será implementado futuramente
+  // const radiusZones = useMemo(() => zones.filter(z => z.zone_type === "radius").sort((a, b) => (a.min_radius_km || 0) - (b.min_radius_km || 0)), [zones]);
 
   const hasNeighborhoodZones = neighborhoodZones.length > 0;
-  const hasRadiusZones = radiusZones.length > 0;
-  const hasBothModes = hasNeighborhoodZones && hasRadiusZones;
+  // const hasRadiusZones = radiusZones.length > 0;
+  // const hasBothModes = hasNeighborhoodZones && hasRadiusZones;
 
-  // Auto-select the only available mode; reset choice when zones change or delivery is selected
+  // GPS/Radius mode desativado temporariamente — será implementado futuramente
   useEffect(() => {
     if (deliveryMethod !== "delivery") {
       setLocationMode(null);
       return;
     }
 
-    if (hasBothModes) {
-      // keep whatever user picked (or null until they pick)
-      return;
-    }
-    if (hasRadiusZones) setLocationMode("radius");
-    else if (hasNeighborhoodZones) setLocationMode("neighborhood");
-    else setLocationMode("none"); // No zones configured, allow delivery without zone selection
-  }, [hasBothModes, hasRadiusZones, hasNeighborhoodZones, deliveryMethod]);
+    if (hasNeighborhoodZones) setLocationMode("neighborhood");
+    else setLocationMode("none");
+  }, [hasNeighborhoodZones, deliveryMethod]);
 
-  const isRadiusMode = locationMode === "radius";
+  // const isRadiusMode = locationMode === "radius"; // GPS — será implementado futuramente
 
   // Derive unique cities
   const cities = useMemo(() => {
@@ -207,34 +221,34 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
 
   const selectedZone = zones.find((z) => z.id === selectedZoneId);
 
-  // Geolocation for radius mode
-  const requestGeolocation = () => {
-    if (!navigator.geolocation) {
-      setGeoError("Seu navegador não suporta geolocalização");
-      return;
-    }
-    setGeoLoading(true);
-    setGeoError(null);
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setUserLat(pos.coords.latitude);
-        setUserLng(pos.coords.longitude);
-        setGeoLoading(false);
-        setLocationSource("gps");
-      },
-      (err) => {
-        setGeoLoading(false);
-        if (err.code === err.PERMISSION_DENIED) {
-          setGeoError("Permissão de localização negada. Ative o GPS e tente novamente.");
-        } else if (err.code === err.POSITION_UNAVAILABLE) {
-          setGeoError("Localização indisponível. Verifique seu GPS.");
-        } else {
-          setGeoError("Não foi possível obter sua localização. Tente novamente.");
-        }
-      },
-      { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 }
-    );
-  };
+  // GPS — será implementado futuramente
+  // const requestGeolocation = () => {
+  //   if (!navigator.geolocation) {
+  //     setGeoError("Seu navegador não suporta geolocalização");
+  //     return;
+  //   }
+  //   setGeoLoading(true);
+  //   setGeoError(null);
+  //   navigator.geolocation.getCurrentPosition(
+  //     (pos) => {
+  //       setUserLat(pos.coords.latitude);
+  //       setUserLng(pos.coords.longitude);
+  //       setGeoLoading(false);
+  //       setLocationSource("gps");
+  //     },
+  //     (err) => {
+  //       setGeoLoading(false);
+  //       if (err.code === err.PERMISSION_DENIED) {
+  //         setGeoError("Permissão de localização negada. Ative o GPS e tente novamente.");
+  //       } else if (err.code === err.POSITION_UNAVAILABLE) {
+  //         setGeoError("Localização indisponível. Verifique seu GPS.");
+  //       } else {
+  //         setGeoError("Não foi possível obter sua localização. Tente novamente.");
+  //       }
+  //     },
+  //     { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 }
+  //   );
+  // };
 
   const formatCep = (v: string) => {
     const n = v.replace(/\D/g, "").slice(0, 8);
@@ -247,81 +261,19 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
     setNeighborhoodCep(formatCep(value));
   };
 
-  const lookupCep = async (rawCep?: string) => {
-    const clean = (rawCep ?? cep).replace(/\D/g, "");
-    if (clean.length !== 8) {
-      setCepError("CEP inválido");
-      return;
-    }
-    setCepLoading(true);
-    setCepError(null);
-    const result = await geocodeCep(clean);
-    setCepLoading(false);
-    if (!result.success || !result.coordinates) {
-      setCepError(result.error || "Não foi possível localizar o CEP");
-      return;
-    }
-    setUserLat(result.coordinates.lat);
-    setUserLng(result.coordinates.lng);
-    if (result.address) {
-      setAddress((prev) => ({
-        ...prev,
-        street: result.address!.street || prev.street,
-        neighborhood: result.address!.neighborhood || prev.neighborhood,
-      }));
-      setResolvedCity(result.address.city);
-      setResolvedState(result.address.state);
-    }
-    setLocationSource("cep");
-  };
+  // GPS — será implementado futuramente
+  // const lookupCep = async (rawCep?: string) => { ... };
 
-  // Calculate distance and find matching zone when GPS coordinates are available
-  useEffect(() => {
-    if (!isRadiusMode || userLat === null || userLng === null) return;
-    if (!restaurantData?.restaurant_lat || !restaurantData?.restaurant_lng) return;
+  // GPS — será implementado futuramente
+  // useEffect calculando distância por haversine removido
 
-    const dist = haversineDistanceKm(
-      restaurantData.restaurant_lat,
-      restaurantData.restaurant_lng,
-      userLat,
-      userLng
-    );
-    setDistanceKm(dist);
+  // GPS — será implementado futuramente
+  // useEffect de reverse geocoding removido
 
-    // Find matching radius zone
-    const match = radiusZones.find(
-      (z) => dist >= (z.min_radius_km || 0) && dist <= (z.max_radius_km || 999)
-    );
-    setMatchedRadiusZone(match || null);
-  }, [userLat, userLng, restaurantData, radiusZones, isRadiusMode]);
-
-  // Reverse geocode when we have coordinates, to fill street/neighborhood
-  useEffect(() => {
-    if (!isRadiusMode || userLat === null || userLng === null) return;
-    let cancelled = false;
-    setResolvingAddress(true);
-    reverseGeocode(userLat, userLng).then((res) => {
-      if (cancelled) return;
-      setResolvingAddress(false);
-      if (res.success && res.address) {
-        setAddress((prev) => ({
-          ...prev,
-          street: prev.street || res.address!.street,
-          neighborhood: prev.neighborhood || res.address!.neighborhood,
-        }));
-        setResolvedCity(res.address.city);
-        setResolvedState(res.address.state);
-      }
-    });
-    return () => { cancelled = true; };
-  }, [userLat, userLng, isRadiusMode]);
-
-  const radiusDeliveryFee = matchedRadiusZone
-    ? matchedRadiusZone.fee
-    : (restaurantData?.default_delivery_fee || 0);
-
-  const isOutOfRange = isRadiusMode && distanceKm !== null && radiusZones.length > 0 && !matchedRadiusZone;
-  const maxRadius = radiusZones.length > 0 ? Math.max(...radiusZones.map(z => z.max_radius_km || 0)) : null;
+  // GPS — será implementado futuramente
+  // const radiusDeliveryFee = ...;
+  // const isOutOfRange = ...;
+  // const maxRadius = ...;
 
   // Check if free shipping threshold is met
   const freeShippingThresholdMet = restaurantData?.free_shipping_threshold && subtotal >= restaurantData.free_shipping_threshold;
@@ -401,16 +353,8 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
         return;
       }
 
-      if (locationMode === "radius") {
-        if (userLat === null || userLng === null) {
-          failValidation({ location: "Use sua localização ou informe o CEP para continuar" }, "radius-location-section");
-          return;
-        }
-        if (isOutOfRange) {
-          scrollToSection("out-of-range-banner");
-          return;
-        }
-      }
+      // GPS/Radius validation — será implementado futuramente
+      // if (locationMode === "radius") { ... }
 
       if (locationMode === "neighborhood") {
         if (neighborhoodCep.replace(/\D/g, "").length !== 8) {
@@ -438,8 +382,7 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
           fieldErrors[field] = err.message;
         });
         const firstField = result.error.errors[0]?.path[0] as string;
-        const fieldIdPrefix = locationMode === "radius" ? "radius-" : "";
-        failValidation(fieldErrors, `${fieldIdPrefix}${firstField}`);
+        failValidation(fieldErrors, firstField);
         return;
       }
     }
@@ -454,8 +397,8 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
   useEffect(() => {
     if (open) {
       setErrors({});
-      setGeoError(null);
-      setCepError(null);
+      // setGeoError(null);   // GPS — será implementado futuramente
+      // setCepError(null);   // GPS — será implementado futuramente
     }
   }, [open]);
 
@@ -479,16 +422,17 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
         const dayStart = startOfDay(selectedDate);
         const dayEnd = endOfDay(selectedDate);
 
-        // Get blocked slots
-        const { data: blockedData } = await supabase
-          .from("scheduling_blocked_slots" as any)
+        // Get blocked slots — tabela fora do schema gerado, cast explícito necessário
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: blockedData } = await (supabase as any)
+          .from("scheduling_blocked_slots")
           .select("blocked_at")
           .eq("restaurant_id", restaurantId)
           .gte("blocked_at", dayStart.toISOString())
-          .lte("blocked_at", dayEnd.toISOString());
+          .lte("blocked_at", dayEnd.toISOString()) as { data: { blocked_at: string }[] | null };
 
         const blockedTimes = new Set(
-          (blockedData || []).map((b: any) => new Date(b.blocked_at).getTime())
+          (blockedData || []).map((b: { blocked_at: string }) => new Date(b.blocked_at).getTime())
         );
 
         // Get existing orders for the day
@@ -498,11 +442,11 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
           .eq("restaurant_id", restaurantId)
           .not("scheduled_at", "is", null)
           .gte("scheduled_at", dayStart.toISOString())
-          .lte("scheduled_at", dayEnd.toISOString());
+          .lte("scheduled_at", dayEnd.toISOString()) as unknown as { data: { scheduled_at: string | null }[] | null };
 
         // Count orders per slot
         const slotCounts = new Map<number, number>();
-        (ordersData || []).forEach((order: any) => {
+        (ordersData || []).forEach((order) => {
           if (order.scheduled_at) {
             const time = new Date(order.scheduled_at).getTime();
             slotCounts.set(time, (slotCounts.get(time) || 0) + 1);
@@ -571,25 +515,15 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
     ? 0
     : (locationMode === "none"
       ? (restaurantData?.default_delivery_fee || 0)
-      : (isRadiusMode
-        ? radiusDeliveryFee
-        : (selectedZone?.fee || 0)));
+      : (selectedZone?.fee || 0));
 
   const currentNeighborhood = locationMode === "none"
     ? (address.neighborhood || "")
-    : isRadiusMode
-      ? (address.neighborhood || (matchedRadiusZone?.name || ""))
-      : (selectedZone?.name || "");
+    : (selectedZone?.name || "");
 
-  // Build human-readable address fields for the order/admin view. Never send raw
-  // coordinates as the street; the customer must confirm a written street name.
-  const radiusStreetForOrder = isRadiusMode
-    ? address.street.trim()
-    : "";
-
-  const radiusNeighborhoodForOrder = isRadiusMode
-    ? (address.neighborhood?.trim() || resolvedCity || matchedRadiusZone?.name || "")
-    : "";
+  // GPS — será implementado futuramente
+  // const radiusStreetForOrder = ...;
+  // const radiusNeighborhoodForOrder = ...;
 
   return (
     <>
@@ -846,47 +780,8 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
             {/* Delivery Address Form */}
             {deliveryMethod === "delivery" && (
               <div className="space-y-4">
-                {/* Mode selector — only when admin enabled BOTH neighborhood and radius */}
-                {hasBothModes && (
-                  <div id="location-mode-section" className="space-y-2">
-                    <Label className="text-sm font-semibold">Como informar seu endereço?</Label>
-                    <div className="grid grid-cols-2 gap-2">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setLocationMode("neighborhood");
-                          setErrors((prev) => ({ ...prev, locationMode: "" }));
-                        }}
-                        className={`flex items-center gap-2 p-3 rounded-lg border-2 transition-all text-left ${
-                          locationMode === "neighborhood"
-                            ? "border-primary bg-primary/5"
-                            : "border-border hover:border-muted-foreground/50"
-                        }`}
-                      >
-                        <MapPin className="w-4 h-4 text-primary flex-shrink-0" />
-                        <span className="text-sm font-medium">Selecionar setor/bairro</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setLocationMode("radius");
-                          setErrors((prev) => ({ ...prev, locationMode: "" }));
-                        }}
-                        className={`flex items-center gap-2 p-3 rounded-lg border-2 transition-all text-left ${
-                          locationMode === "radius"
-                            ? "border-primary bg-primary/5"
-                            : "border-border hover:border-muted-foreground/50"
-                        }`}
-                      >
-                        <Radar className="w-4 h-4 text-primary flex-shrink-0" />
-                        <span className="text-sm font-medium">Usar GPS</span>
-                      </button>
-                    </div>
-                    {errors.locationMode && (
-                      <p className="text-xs text-destructive">{errors.locationMode}</p>
-                    )}
-                  </div>
-                )}
+                {/* GPS/Radius mode selector — será implementado futuramente */}
+                {/* {hasBothModes && ( ... )} */}
 
                 {/* Hide form fields until a mode is chosen (only matters when both available) */}
                 {locationMode && (
@@ -966,196 +861,8 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
                   </>
                 )}
 
-                {/* ─── Radius Mode: GPS ─────────────── */}
-                {isRadiusMode && (
-                  <>
-                    {userLat === null ? (
-                      <div id="radius-location-section" className="space-y-3">
-                        <Button
-                          type="button"
-                          onClick={requestGeolocation}
-                          disabled={geoLoading}
-                          variant="outline"
-                          className="w-full h-12 gap-2"
-                        >
-                          {geoLoading ? (
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                          ) : (
-                            <Navigation className="w-4 h-4" />
-                          )}
-                          {geoLoading ? "Obtendo localização..." : "Usar minha localização"}
-                        </Button>
-                        {geoError && (
-                          <p className="text-xs text-destructive">{geoError}</p>
-                        )}
-                        {errors.location && (
-                          <p className="text-xs text-destructive">{errors.location}</p>
-                        )}
-                        <div className="flex items-center gap-3">
-                          <div className="flex-1 h-px bg-border" />
-                          <span className="text-xs text-muted-foreground">ou informe seu CEP</span>
-                          <div className="flex-1 h-px bg-border" />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="cep" className="text-sm font-medium">CEP</Label>
-                          <div className="flex gap-2">
-                            <Input
-                              id="cep"
-                              type="text"
-                              inputMode="numeric"
-                              autoComplete="postal-code"
-                              enterKeyHint="search"
-                              placeholder="00000-000"
-                              value={cep}
-                              onChange={(e) => {
-                                const formatted = formatCep(e.target.value);
-                                setCep(formatted);
-                                setCepError(null);
-                                // Auto-lookup as soon as the CEP is complete, so the
-                                // user doesn't need to find the button under the keyboard
-                                if (formatted.replace(/\D/g, "").length === 8) {
-                                  lookupCep(formatted);
-                                }
-                              }}
-                              className={`h-12 text-base ${cepError ? "border-destructive" : ""}`}
-                            />
-                            <Button
-                              type="button"
-                              onClick={() => lookupCep()}
-                              disabled={cepLoading || cep.replace(/\D/g, "").length !== 8}
-                              variant="outline"
-                              className="h-12 px-4"
-                            >
-                              {cepLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Buscar"}
-                            </Button>
-                          </div>
-                          {cepError && <p className="text-xs text-destructive">{cepError}</p>}
-                        </div>
-                      </div>
-                    ) : (
-                      <>
-                        {/* Distance + fee info */}
-                        {distanceKm !== null && !isOutOfRange && (
-                          <div className="flex items-center gap-2 p-3 rounded-lg bg-primary/5 border border-primary/20">
-                            <Radar className="w-4 h-4 text-primary flex-shrink-0" />
-                            <p className="text-sm text-muted-foreground">
-                              Distância: <span className="font-semibold text-foreground">{distanceKm.toFixed(1)} km</span>
-                              {" · "}Taxa: <span className="font-semibold text-foreground">R$ {radiusDeliveryFee.toFixed(2)}</span>
-                              {matchedRadiusZone?.estimated_time_min && (
-                                <> · ~{matchedRadiusZone.estimated_time_min} min</>
-                              )}
-                            </p>
-                          </div>
-                        )}
-
-                        {isOutOfRange && (
-                          <div id="out-of-range-banner" className="p-3 rounded-lg border border-destructive/30 bg-destructive/5">
-                            <p className="text-sm text-destructive">
-                              Infelizmente você está fora da área de entrega ({distanceKm?.toFixed(1)} km).
-                              {maxRadius && <> Entregamos até {maxRadius} km.</>}
-                            </p>
-                          </div>
-                        )}
-
-                        <Button
-                          onClick={() => {
-                            setUserLat(null);
-                            setUserLng(null);
-                            setDistanceKm(null);
-                            setMatchedRadiusZone(null);
-                            setLocationSource(null);
-                          }}
-                          variant="ghost"
-                          size="sm"
-                          className="gap-1.5 text-muted-foreground"
-                        >
-                          <Navigation className="w-3.5 h-3.5" />
-                          Alterar localização
-                        </Button>
-
-                        {/* Extra address details for radius mode */}
-                        {!isOutOfRange && (
-                          <div className="space-y-4 pt-2 border-t border-border">
-                            <p className="text-xs text-muted-foreground">
-                              {resolvingAddress ? "Buscando endereço..." : "Confirme e complemente seu endereço para o entregador encontrar você:"}
-                            </p>
-
-                            <div className="space-y-2">
-                              <Label htmlFor="radius-street" className="text-sm font-medium">Rua / Avenida *</Label>
-                              <Input
-                                id="radius-street"
-                                type="text"
-                                autoComplete="address-line1"
-                                enterKeyHint="next"
-                                placeholder="Nome da rua"
-                                value={address.street}
-                                onChange={handleInputChange("street")}
-                                className={`h-12 text-base ${errors.street ? "border-destructive" : ""}`}
-                              />
-                              {errors.street && <p className="text-xs text-destructive">{errors.street}</p>}
-                            </div>
-
-                            <div className="space-y-2">
-                              <Label htmlFor="radius-neighborhood" className="text-sm font-medium">Bairro</Label>
-                              <Input
-                                id="radius-neighborhood"
-                                type="text"
-                                enterKeyHint="next"
-                                placeholder="Bairro"
-                                value={address.neighborhood}
-                                onChange={handleInputChange("neighborhood")}
-                                className="h-12 text-base"
-                              />
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-3">
-                              <div className="space-y-2">
-                                <Label htmlFor="radius-number" className="text-sm font-medium">Número *</Label>
-                                <Input
-                                  id="radius-number"
-                                  type="text"
-                                  enterKeyHint="next"
-                                  placeholder="Nº"
-                                  value={address.number}
-                                  onChange={handleInputChange("number")}
-                                  className={`h-12 text-base ${errors.number ? "border-destructive" : ""}`}
-                                />
-                                {errors.number && <p className="text-xs text-destructive">{errors.number}</p>}
-                              </div>
-                              <div className="space-y-2">
-                                <Label htmlFor="radius-complement" className="text-sm font-medium">Complemento</Label>
-                                <Input
-                                  id="radius-complement"
-                                  type="text"
-                                  autoComplete="address-line2"
-                                  enterKeyHint="next"
-                                  placeholder="Apto, bloco..."
-                                  value={address.complement}
-                                  onChange={handleInputChange("complement")}
-                                  className="h-12 text-base"
-                                />
-                              </div>
-                            </div>
-
-                            <div className="space-y-2">
-                              <Label htmlFor="radius-reference" className="text-sm font-medium">Ponto de referência</Label>
-                              <Input
-                                id="radius-reference"
-                                type="text"
-                                enterKeyHint="done"
-                                placeholder="Próximo a..."
-                                value={address.reference}
-                                onChange={handleInputChange("reference")}
-                                className="h-12 text-base"
-                              />
-                            </div>
-                          </div>
-                        )}
-                      </>
-                    )}
-
-                  </>
-                )}
+                {/* ─── Radius Mode: GPS — será implementado futuramente ─── */}
+                {/* {isRadiusMode && ( ... )} */}
 
                 {/* ─── Zones Mode: City + Neighborhood selects ─── */}
                 {locationMode === "neighborhood" && (
@@ -1335,12 +1042,12 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
         address={
           deliveryMethod === "delivery"
             ? {
-                street: locationMode === "none" ? address.street : (isRadiusMode ? radiusStreetForOrder : address.street),
+                street: address.street,
                 number: address.number,
-                neighborhood: locationMode === "none" ? (address.neighborhood || "") : (isRadiusMode ? radiusNeighborhoodForOrder : currentNeighborhood),
+                neighborhood: currentNeighborhood,
                 complement: address.complement || undefined,
                 reference: address.reference || undefined,
-                cep: isRadiusMode ? cep : neighborhoodCep || undefined,
+                cep: neighborhoodCep || undefined,
               }
             : undefined
         }
