@@ -64,8 +64,8 @@ export function CartDrawer({ open, onOpenChange, onProductClick, restaurantId, r
   return (
     <>
       <Drawer open={open} onOpenChange={onOpenChange}>
-        <DrawerContent className="max-h-[95vh] max-w-md mx-auto">
-          <DrawerHeader className="border-b border-border px-4 py-3">
+        <DrawerContent className="max-h-[95vh] max-w-md mx-auto flex flex-col">
+          <DrawerHeader className="border-b border-border px-4 py-3 shrink-0">
             <div className="flex items-center justify-between">
               <DrawerTitle className="text-lg font-bold flex items-center gap-2">
                 <ShoppingBag className="w-5 h-5 text-primary" />
@@ -97,7 +97,7 @@ export function CartDrawer({ open, onOpenChange, onProductClick, restaurantId, r
             </div>
           ) : (
             <>
-              <ScrollArea className="flex-1 max-h-[calc(95vh-16rem)]">
+              <ScrollArea className="flex-1 overflow-hidden">
                 {/* Closed Warning */}
                 {!isOpen && (
                   <div className="mx-4 mt-4 p-4 bg-amber-500/10 border border-amber-500/20 rounded-xl">
@@ -260,7 +260,7 @@ export function CartDrawer({ open, onOpenChange, onProductClick, restaurantId, r
               </ScrollArea>
 
               {/* Fixed Footer with Total */}
-              <div className="border-t border-border p-4 bg-card space-y-3 safe-area-bottom">
+              <div className="border-t border-border p-4 bg-card space-y-3 safe-area-bottom shrink-0">
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Subtotal</span>
