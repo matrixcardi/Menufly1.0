@@ -6,9 +6,18 @@ interface TrackingScriptsProps {
   gtmContainerId?: string | null;
   gaMeasurementId?: string | null;
   restaurantId?: string;
+  restaurantSlug?: string;
+  restaurantName?: string;
 }
 
-export function TrackingScripts({ metaPixelId, gtmContainerId, gaMeasurementId, restaurantId }: TrackingScriptsProps) {
+export function TrackingScripts({
+  metaPixelId,
+  gtmContainerId,
+  gaMeasurementId,
+  restaurantId,
+  restaurantSlug,
+  restaurantName,
+}: TrackingScriptsProps) {
   // Capture fbclid from URL on mount (before pixel loads)
   useEffect(() => {
     captureFbclid();
@@ -95,11 +104,30 @@ export function TrackingScripts({ metaPixelId, gtmContainerId, gaMeasurementId, 
       scripts.push(gaConfigScript);
     }
 
+    // Microsoft Clarity (gravação de sessão + heatmaps). Projeto único global,
+    // agrupado por restaurante via custom tags.
+    const clarityId = import.meta.env.VITE_CLARITY_PROJECT_ID;
+    if (clarityId) {
+      const clarityScript = document.createElement("script");
+      clarityScript.innerHTML = `
+        (function(c,l,a,r,i,t,y){
+          c[a]=c[a]||function(){(c[a].q=c[a].q||[]).push(arguments)};
+          t=l.createElement(r);t.async=1;t.src="https://www.clarity.ms/tag/"+i;
+          y=l.getElementsByTagName(r)[0];y.parentNode.insertBefore(t,y);
+        })(window, document, "clarity", "script", "${clarityId}");
+        ${restaurantId ? `window.clarity("set", "restaurant_id", "${restaurantId}");` : ""}
+        ${restaurantSlug ? `window.clarity("set", "restaurant_slug", "${restaurantSlug}");` : ""}
+        ${restaurantName ? `window.clarity("set", "restaurant_name", ${JSON.stringify(restaurantName)});` : ""}
+      `;
+      document.head.appendChild(clarityScript);
+      scripts.push(clarityScript);
+    }
+
     return () => {
       scripts.forEach((s) => s.remove());
       noscripts.forEach((n) => n.remove());
     };
-  }, [metaPixelId, gtmContainerId, gaMeasurementId, restaurantId]);
+  }, [metaPixelId, gtmContainerId, gaMeasurementId, restaurantId, restaurantSlug, restaurantName]);
 
   return null;
 }

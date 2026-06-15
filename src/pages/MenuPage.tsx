@@ -241,6 +241,8 @@ const MenuPage = () => {
             gtmContainerId={restaurant.gtm_container_id}
             gaMeasurementId={restaurant.ga_measurement_id}
             restaurantId={restaurant.id}
+            restaurantSlug={restaurant.slug}
+            restaurantName={restaurant.name}
           />
         </Suspense>
       )}

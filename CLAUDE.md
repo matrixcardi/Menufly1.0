@@ -287,6 +287,7 @@ Sempre exibir com `FormMessage` do shadcn/ui — nunca `console.log` de erros si
 | `VITE_SUPABASE_URL` | Cliente Supabase |
 | `VITE_SUPABASE_PUBLISHABLE_KEY` | Cliente Supabase (chave anon) |
 | `VITE_SUPABASE_PROJECT_ID` | Geração de tipos, CLI |
+| `VITE_CLARITY_PROJECT_ID` | Microsoft Clarity — gravação de sessão e heatmaps do cardápio do cliente (agrupado por restaurante via custom tags) |
 
 Prefixo `VITE_` obrigatório para qualquer variável acessível no frontend (exposta ao browser). Segredos (Stripe secret key, API keys de terceiros) ficam **apenas** nas Edge Functions como secrets do Supabase, nunca no `.env` do frontend.
 
