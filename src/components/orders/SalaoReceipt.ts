@@ -39,7 +39,7 @@ const payLabels: Record<string, string> = {
   cash: "Dinheiro",
   card: "Cartão",
   pix: "PIX",
-  mixed: "Pagamento Misto",
+  //mixed: "Pagamento Misto",
 };
 
 // ── Kitchen Ticket ────────────────────────────────────────────────────────────

@@ -791,7 +791,7 @@ export default function AdminSalao() {
     cash: { label: "💵 Dinheiro", icon: Banknote },
     card: { label: "💳 Cartão", icon: CreditCard },
     pix: { label: "💵 Pix", icon: Smartphone },
-    mixed: { label: "💵 Misto", icon: Receipt },
+    //mixed: { label: "💵 Misto", icon: Receipt },
   }[method] || { label: method, icon: Receipt });
 
   const getClosedOrderSummary = () => {
@@ -1834,7 +1834,7 @@ function CloseComandaModal({ open, order, table, onClose, onCancel }: {
             <Label>Forma de pagamento</Label>
             <div className="grid grid-cols-2 gap-2">
               {([["cash","Dinheiro",<DollarSign className="w-4 h-4"/>],["card","Cartão",<CreditCard className="w-4 h-4"/>],
-                ["pix","PIX",<Smartphone className="w-4 h-4"/>],["mixed","Misto",<Receipt className="w-4 h-4"/>]] as const).map(([val, label, icon]) => (
+                ["pix","PIX",<Smartphone className="w-4 h-4"/>]] as const).map(([val, label, icon]) => (
                 <button key={val} type="button"
                   onClick={() => setPaymentMethod(val as PaymentType)}
                   className={`flex items-center gap-2 p-3 rounded-lg border-2 text-sm font-medium transition-all
