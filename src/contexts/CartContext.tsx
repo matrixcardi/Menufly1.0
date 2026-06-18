@@ -33,6 +33,7 @@ interface CartContextType {
   activePromoId: string | null;
   removeItem: (itemId: string) => void;
   updateQuantity: (itemId: string, quantity: number) => void;
+  updateItem: (itemId: string, quantity: number, addons: SelectedAddons, addonsTotal: number, notes?: string, addonNames?: Record<string, string>) => void;
   applyCoupon: (coupon: Coupon | null) => void;
   setRestaurantId: (id: string) => void;
   setRestaurantSlug: (slug: string) => void;
@@ -171,6 +172,27 @@ export function CartProvider({ children }: { children: ReactNode }) {
     );
   };
 
+  const updateItem = (itemId: string, quantity: number, addons: SelectedAddons, addonsTotal: number, notes?: string, addonNames?: Record<string, string>) => {
+    if (quantity <= 0) {
+      removeItem(itemId);
+      return;
+    }
+    setItems((prev) =>
+      prev.map((item) =>
+        item.id === itemId
+          ? {
+              ...item,
+              quantity,
+              addons,
+              addonNames,
+              notes,
+              unitPrice: item.product.price + addonsTotal,
+            }
+          : item
+      )
+    );
+  };
+
   const applyCoupon = (newCoupon: Coupon | null) => {
     setCoupon(newCoupon);
   };
@@ -212,6 +234,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
         addItem,
         removeItem,
         updateQuantity,
+        updateItem,
         applyCoupon,
         setRestaurantId,
         setRestaurantSlug,

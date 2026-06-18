@@ -23,11 +23,16 @@ interface ProductDrawerProps {
   onAddToCart?: (product: Product, quantity: number, addons: SelectedAddons, addonsTotal: number, notes?: string, addonNames?: Record<string, string>) => void;
   onOpenCart?: () => void;
   restaurantId?: string;
+  editItemId?: string | null;
+  initialQuantity?: number;
+  initialAddons?: SelectedAddons;
+  initialNotes?: string;
+  onUpdateCart?: (itemId: string, product: Product, quantity: number, addons: SelectedAddons, addonsTotal: number, notes?: string, addonNames?: Record<string, string>) => void;
 }
 
 export type SelectedAddons = Record<string, Record<string, number>>;
 
-export function ProductDrawer({ product, open, onOpenChange, onAddToCart, onOpenCart, restaurantId }: ProductDrawerProps) {
+export function ProductDrawer({ product, open, onOpenChange, onAddToCart, onOpenCart, restaurantId, editItemId, initialQuantity, initialAddons, initialNotes, onUpdateCart }: ProductDrawerProps) {
   const [quantity, setQuantity] = useState(1);
   const [selectedAddons, setSelectedAddons] = useState<SelectedAddons>({});
   const [notes, setNotes] = useState("");
@@ -40,6 +45,17 @@ export function ProductDrawer({ product, open, onOpenChange, onAddToCart, onOpen
       trackViewContent(product.name, product.id, product.price, restaurantId, product.category);
     }
   }, [open, product?.id]);
+
+  // Initialize state on open: pre-fill in edit mode, clean slate when adding.
+  // Intentionally only depends on `open` so editing the selections won't reset them.
+  useEffect(() => {
+    if (open) {
+      setQuantity(initialQuantity ?? 1);
+      setSelectedAddons(initialAddons ?? {});
+      setNotes(initialNotes ?? "");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   const addonSections = addonGroups;
 
@@ -112,7 +128,7 @@ export function ProductDrawer({ product, open, onOpenChange, onAddToCart, onOpen
       }
     }
 
-    if (product && onAddToCart) {
+    if (product && (onAddToCart || onUpdateCart)) {
       // Build addon names map from current addon sections
       const addonNamesMap: Record<string, string> = {};
       addonSections.forEach((section) => {
@@ -125,7 +141,11 @@ export function ProductDrawer({ product, open, onOpenChange, onAddToCart, onOpen
         });
       });
       console.log('[PEDIDO] addons:', selectedAddons);
-      onAddToCart(product, quantity, selectedAddons, addonsTotal, notes.trim() || undefined, addonNamesMap);
+      if (editItemId) {
+        onUpdateCart?.(editItemId, product, quantity, selectedAddons, addonsTotal, notes.trim() || undefined, addonNamesMap);
+      } else {
+        onAddToCart(product, quantity, selectedAddons, addonsTotal, notes.trim() || undefined, addonNamesMap);
+      }
     }
     // Reset state
     setQuantity(1);
@@ -231,7 +251,7 @@ export function ProductDrawer({ product, open, onOpenChange, onAddToCart, onOpen
               onClick={handleAddToCart}
               className="flex-1 h-12 text-base font-bold bg-primary hover:bg-primary/90"
             >
-              Adicionar • {formatPrice(totalPrice)}
+              {editItemId ? "Salvar" : "Adicionar"} • {formatPrice(totalPrice)}
             </Button>
           </div>
         </div>

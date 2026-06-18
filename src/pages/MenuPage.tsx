@@ -8,7 +8,7 @@ import { PopularSection } from "@/components/menu/PopularSection";
 import { ProductList } from "@/components/menu/ProductList";
 import { BottomNav } from "@/components/menu/BottomNav";
 import { useCart } from "@/contexts/CartContext";
-import type { SelectedAddons } from "@/contexts/CartContext";
+import type { SelectedAddons, CartItem } from "@/contexts/CartContext";
 import { useRestaurantBySlug, Product } from "@/hooks/useRestaurantBySlug";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -58,6 +58,7 @@ const MenuPage = () => {
   const [userClickedCategory, setUserClickedCategory] = useState(false);
   const [activeTab, setActiveTab] = useState("inicio");
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [editingItem, setEditingItem] = useState<CartItem | null>(null);
   const [selectedPromo, setSelectedPromo] = useState<PromoKitSummary | null>(null);
   const [promoDrawerOpen, setPromoDrawerOpen] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -79,7 +80,7 @@ const MenuPage = () => {
   const categoryTabsRef = useRef<HTMLDivElement>(null);
   const initialIsOpenRef = useRef<boolean>(false);
 
-  const { addItem, setRestaurantId, setRestaurantSlug } = useCart();
+  const { addItem, updateItem, setRestaurantId, setRestaurantSlug } = useCart();
   const { restaurant, isClosingSoon, minutesUntilClose, menuTheme, categories, products, productCategoryLinks, loading, notFound } = useRestaurantBySlug(slug);
 
   // Store initial restaurant status for polling comparison
@@ -200,6 +201,15 @@ const MenuPage = () => {
 
   const handleOpenCart = () => {
     setCartOpen(true);
+  };
+
+  const handleEditCartItem = (item: CartItem) => {
+    setEditingItem(item);
+    setProductMounted(true);
+    setCartOpen(false);
+    setTimeout(() => {
+      setDrawerOpen(true);
+    }, 300);
   };
 
   // Map categories to the format expected by CategoryTabs
@@ -338,7 +348,7 @@ const MenuPage = () => {
       {productMounted && (
         <Suspense fallback={null}>
           <ProductDrawer
-            product={selectedProduct ? {
+            product={editingItem ? editingItem.product : (selectedProduct ? {
               id: selectedProduct.id,
               name: selectedProduct.name,
               description: selectedProduct.description || "",
@@ -347,13 +357,23 @@ const MenuPage = () => {
               category: selectedProduct.category_id || "",
               cashback: selectedProduct.cashback || undefined,
               isPopular: selectedProduct.is_popular || undefined,
-            } : null}
+            } : null)}
             open={drawerOpen}
-            onOpenChange={setDrawerOpen}
+            onOpenChange={(nextOpen) => {
+              setDrawerOpen(nextOpen);
+              if (!nextOpen) setEditingItem(null);
+            }}
             onAddToCart={(product, quantity, addons, addonsTotal, notes, addonNames) => {
               if (selectedProduct) {
                 handleAddToCart(selectedProduct, quantity, addons, addonsTotal, notes, addonNames);
               }
+            }}
+            editItemId={editingItem?.id ?? null}
+            initialQuantity={editingItem?.quantity}
+            initialAddons={editingItem?.addons}
+            initialNotes={editingItem?.notes}
+            onUpdateCart={(itemId, _product, quantity, addons, addonsTotal, notes, addonNames) => {
+              updateItem(itemId, quantity, addons, addonsTotal, notes, addonNames);
             }}
             onOpenCart={handleOpenCart}
             restaurantId={restaurant?.id}
@@ -370,6 +390,7 @@ const MenuPage = () => {
             restaurantIsOpen={restaurant.is_open}
             restaurantSlug={slug}
             dbProducts={products}
+            onEditItem={handleEditCartItem}
             onProductClick={(product) => {
               const dbProduct: Product = {
                 id: product.id,

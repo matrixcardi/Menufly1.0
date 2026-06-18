@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { X, Minus, Plus, Trash2, Tag, ChevronRight, ShoppingBag, Clock, Zap, Truck, Percent, Gift } from "lucide-react";
-import { useCart } from "@/contexts/CartContext";
+import { X, Minus, Plus, Trash2, Pencil, Tag, ChevronRight, ShoppingBag, Clock, Zap, Truck, Percent, Gift } from "lucide-react";
+import { useCart, type CartItem } from "@/contexts/CartContext";
 import { useRestaurantStatus } from "@/hooks/useRestaurantStatus";
 import { Product as MenuProduct } from "@/data/menu-data";
 import {
@@ -20,13 +20,14 @@ interface CartDrawerProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onProductClick?: (product: MenuProduct) => void;
+  onEditItem?: (item: CartItem) => void;
   restaurantId?: string;
   restaurantIsOpen?: boolean;
   restaurantSlug?: string;
   dbProducts?: Array<{ id: string; name: string; description: string | null; price: number; image_url: string | null; category_id: string | null; cashback: number | null; is_popular: boolean | null; is_active: boolean | null }>;
 }
 
-export function CartDrawer({ open, onOpenChange, onProductClick, restaurantId, restaurantIsOpen, restaurantSlug, dbProducts }: CartDrawerProps) {
+export function CartDrawer({ open, onOpenChange, onProductClick, onEditItem, restaurantId, restaurantIsOpen, restaurantSlug, dbProducts }: CartDrawerProps) {
   const { items, subtotal, discount, total, coupon, updateQuantity, removeItem, activeBenefits, hasFreeShipping, autoPromoDiscount } = useCart();
   const { restaurant, isCurrentlyOpen, loading } = useRestaurantStatus(restaurantId);
   const resolvedRestaurantId = restaurantId || restaurant?.id;
@@ -181,12 +182,22 @@ export function CartDrawer({ open, onOpenChange, onProductClick, restaurantId, r
                                 <Plus className="w-4 h-4" />
                               </button>
                             </div>
-                            <button
-                              onClick={() => removeItem(item.id)}
-                              className="p-2 text-destructive hover:bg-destructive/10 rounded-lg transition-colors"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
+                            <div className="flex items-center gap-1">
+                              <button
+                                onClick={() => onEditItem?.(item)}
+                                aria-label="Editar item"
+                                className="p-2 text-muted-foreground hover:bg-muted rounded-lg transition-colors"
+                              >
+                                <Pencil className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => removeItem(item.id)}
+                                aria-label="Remover item"
+                                className="p-2 text-destructive hover:bg-destructive/10 rounded-lg transition-colors"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
                           </div>
                         </div>
                       </div>

@@ -28,6 +28,7 @@ const AdminLayout = lazy(() => import("./pages/admin/AdminLayout"));
 const AdminMenu = lazy(() => import("./pages/admin/AdminMenu"));
 const AdminDashboard = lazy(() => import("./pages/admin/AdminDashboard"));
 const AdminOrders = lazy(() => import("./pages/admin/AdminOrders"));
+const AdminOrdersPanel = lazy(() => import("./pages/admin/AdminOrdersPanel"));
 const AdminCoupons = lazy(() => import("./pages/admin/AdminCoupons"));
 const AdminAds = lazy(() => import("./pages/admin/AdminAds"));
 const AdminReports = lazy(() => import("./pages/admin/AdminReports"));
@@ -130,6 +131,7 @@ const App = () => (
                 <Route path="pdv-mesas" element={<AdminSalao />} />
                 <Route path="cardapio" element={<AdminMenu />} />
                 <Route path="pedidos" element={<AdminOrders />} />
+                <Route path="pedidos/painel" element={<AdminOrdersPanel />} />
                 <Route path="produtos" element={<AdminDashboard />} />
                 <Route path="promos" element={<AdminCoupons />} />
                 <Route path="cupons" element={<AdminCoupons />} /> {/* backward compat */}

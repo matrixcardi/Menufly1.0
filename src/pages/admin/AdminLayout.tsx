@@ -57,6 +57,7 @@ import {
   Tag,
   Package,
   ClipboardList,
+  LayoutGrid,
   Box,
   Building2,
   Megaphone,
@@ -107,8 +108,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { usePDVKiosk } from "@/contexts/PDVKioskContext";
 
-// Pedidos separado para ficar em destaque
-const ordersItem = { title: "Acompanhar Pedidos", url: "/admin/pedidos", icon: ClipboardList };
+// Painel ao Vivo (Kanban) separado para ficar em destaque
+const ordersItem = { title: "Painel ao Vivo", url: "/admin/pedidos/painel", icon: LayoutGrid };
+// Listagem de pedidos (com filtros e detalhe)
+const ordersListItem = { title: "Pedidos", url: "/admin/pedidos", icon: ClipboardList };
 
 // Salão - unifica PDV e Mesas
 const salaoItem = { title: "Salão", url: "/admin/salao", icon: ShoppingCart };
@@ -313,15 +316,15 @@ function AdminSidebar({ pendingOrdersCount, isCollaborator, canAccessWhatsAppBot
           </button>
         </div>
 
-        {/* Pedidos - Fixado e em destaque */}
-        <div className="mb-4 px-1">
+        {/* Painel ao Vivo (Kanban) - Fixado e em destaque */}
+        <div className="mb-2 px-1">
           <NavLink
             to={ordersItem.url}
             className="flex items-center gap-3 px-3 py-3 rounded-2xl bg-primary/8 border border-primary/15 hover:bg-primary/15 transition-all duration-300"
             activeClassName="bg-primary text-primary-foreground border-primary shadow-apple"
           >
             <div className="w-10 h-10 bg-primary/15 rounded-xl flex items-center justify-center">
-              <ClipboardList className="w-5 h-5" />
+              <LayoutGrid className="w-5 h-5" />
             </div>
             <div className="flex-1">
               <span className="font-semibold text-sm">{ordersItem.title}</span>
@@ -336,6 +339,19 @@ function AdminSidebar({ pendingOrdersCount, isCollaborator, canAccessWhatsAppBot
                 {pendingOrdersCount}
               </Badge>
             )}
+          </NavLink>
+        </div>
+
+        {/* Pedidos - Listagem com filtros e detalhe */}
+        <div className="mb-4 px-1">
+          <NavLink
+            to={ordersListItem.url}
+            end
+            className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-secondary/80 transition-all duration-200"
+            activeClassName="bg-primary/10 text-primary font-medium shadow-apple-sm"
+          >
+            <ordersListItem.icon className="w-4.5 h-4.5" />
+            <span className="flex-1 text-sm">{ordersListItem.title}</span>
           </NavLink>
         </div>
 
