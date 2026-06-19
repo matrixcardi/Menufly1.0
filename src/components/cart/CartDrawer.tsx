@@ -11,7 +11,6 @@ import {
   DrawerClose,
 } from "@/components/ui/drawer";
 import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { CouponSelector } from "./CouponSelector";
 import { CrossSellSection } from "./CrossSellSection";
 import { CheckoutDrawer } from "@/components/checkout/CheckoutDrawer";
@@ -98,7 +97,7 @@ export function CartDrawer({ open, onOpenChange, onProductClick, onEditItem, res
             </div>
           ) : (
             <>
-              <ScrollArea className="flex-1 overflow-hidden">
+              <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain">
                 {/* Closed Warning */}
                 {!isOpen && (
                   <div className="mx-4 mt-4 p-4 bg-amber-500/10 border border-amber-500/20 rounded-xl">
@@ -268,7 +267,7 @@ export function CartDrawer({ open, onOpenChange, onProductClick, onEditItem, res
                     onProductClick={handleCrossSellClick}
                   />
                 )}
-              </ScrollArea>
+              </div>
 
               {/* Fixed Footer with Total */}
               <div className="border-t border-border p-4 bg-card space-y-3 safe-area-bottom shrink-0">

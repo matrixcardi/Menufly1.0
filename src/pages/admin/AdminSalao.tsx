@@ -164,6 +164,7 @@ export default function AdminSalao() {
   const [showOpenTableModal, setShowOpenTableModal] = useState(false);
   const [pendingOpenTable, setPendingOpenTable] = useState<Table | null>(null);
   const [showCancelTableConfirm, setShowCancelTableConfirm] = useState(false);
+  const [editingObs, setEditingObs] = useState<{ idx: number; value: string } | null>(null);
   // Filter
   const [tableFilter, setTableFilter] = useState<"all" | "free" | "occupied" | "bill_requested" | "reserved">("all");
 
@@ -411,8 +412,20 @@ export default function AdminSalao() {
     if (!confirmed) return;
 
     const newItems = activeOrder.items.filter(i => !(i.product_id === item.product_id && i.observation === item.observation));
-    
+
     await updateActiveOrderItems(newItems);
+  };
+
+  const handleEditActiveOrderItemObservation = async (idx: number, newObservation: string) => {
+    if (!activeOrder) return;
+    if (idx < 0 || idx >= activeOrder.items.length) return;
+
+    const newItems = activeOrder.items.map((item, i) =>
+      i === idx ? { ...item, observation: newObservation } : item
+    );
+
+    await updateActiveOrderItems(newItems);
+    setEditingObs(null);
   };
 
   const handleOpenTable = async (peopleCount: number) => {
@@ -1203,18 +1216,26 @@ export default function AdminSalao() {
                     <div className="flex items-center gap-3 ml-2 flex-shrink-0">
                       <span className="text-xs font-semibold text-orange-700 dark:text-orange-300">R$ {(item.price * item.quantity).toFixed(2)}</span>
                       
-                      <div className="flex items-center bg-orange-100 dark:bg-orange-900/40 rounded-md p-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <Button variant="ghost" size="icon" className="h-6 w-6 text-orange-700 dark:text-orange-300 hover:bg-orange-200 dark:hover:bg-orange-800"
+                      <div className="flex items-center bg-orange-100 dark:bg-orange-900/40 rounded-md p-0.5">
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-orange-700 dark:text-orange-300 hover:bg-orange-200 dark:hover:bg-orange-800"
+                          title="Diminuir quantidade"
                           onClick={() => handleUpdateActiveOrderItemQty(item, -1)}>
-                          <Minus className="w-3 h-3" />
+                          <Minus className="w-4 h-4" />
                         </Button>
-                        <Button variant="ghost" size="icon" className="h-6 w-6 text-orange-700 dark:text-orange-300 hover:bg-orange-200 dark:hover:bg-orange-800"
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-orange-700 dark:text-orange-300 hover:bg-orange-200 dark:hover:bg-orange-800"
+                          title="Aumentar quantidade"
                           onClick={() => handleUpdateActiveOrderItemQty(item, 1)}>
-                          <Plus className="w-3 h-3" />
+                          <Plus className="w-4 h-4" />
                         </Button>
-                        <Button variant="ghost" size="icon" className="h-6 w-6 text-red-500 hover:bg-red-100 dark:hover:bg-red-900/30"
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-orange-700 dark:text-orange-300 hover:bg-orange-200 dark:hover:bg-orange-800"
+                          title="Editar observação"
+                          onClick={() => setEditingObs({ idx, value: item.observation || "" })}>
+                          <Edit className="w-4 h-4" />
+                        </Button>
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-red-500 hover:bg-red-100 dark:hover:bg-red-900/30"
+                          title="Remover item"
                           onClick={() => handleRemoveActiveOrderItem(item)}>
-                          <Trash2 className="w-3 h-3" />
+                          <Trash2 className="w-4 h-4" />
                         </Button>
                       </div>
                     </div>
@@ -1734,6 +1755,36 @@ export default function AdminSalao() {
             onRefresh={fetchData}
             onEditTable={table => { setEditingTable(table); setShowManageModal(false); setShowTableModal(true); }}
           />
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit item observation modal */}
+      <Dialog open={!!editingObs} onOpenChange={open => { if (!open) setEditingObs(null); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              Editar observação{editingObs && activeOrder?.items[editingObs.idx] ? ` — ${activeOrder.items[editingObs.idx].name}` : ""}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label htmlFor="edit-obs">Observação</Label>
+            <Textarea
+              id="edit-obs"
+              placeholder="Ex.: sem cebola, ponto da carne, etc."
+              value={editingObs?.value ?? ""}
+              onChange={e => setEditingObs(prev => prev ? { ...prev, value: e.target.value } : prev)}
+              rows={3}
+              autoFocus
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditingObs(null)}>Cancelar</Button>
+            <Button
+              onClick={() => { if (editingObs) handleEditActiveOrderItemObservation(editingObs.idx, editingObs.value.trim()); }}
+            >
+              Salvar
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
