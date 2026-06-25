@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Tables } from "@/integrations/supabase/types";
 import { OrderStatus, ORDER_STATUS_TRANSITIONS, ORDER_STATUS_LABELS, DELIVERY_STATUS_TRANSITIONS, PICKUP_STATUS_TRANSITIONS } from "@/types/order";
 import { Clock, ChefHat, Package, HandPlatter, Truck, CheckCircle2, XCircle, Check, Phone, MapPin, CreditCard, Calendar } from "lucide-react";
@@ -9,6 +10,16 @@ import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import EmitirNFeButton from "@/components/admin/fiscal/EmitirNFeButton";
 import NFeStatusBadge from "@/components/admin/fiscal/NFeStatusBadge";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 type Order = Tables<"orders">;
 
@@ -87,6 +98,8 @@ export function KanbanOrderCard({
   const deliveryType = order.delivery_type as "delivery" | "pickup" | "table";
   const isTableOrder = deliveryType === "table" || (order as any).origin === "pdv_salao";
   
+  const [showRejectDialog, setShowRejectDialog] = useState(false);
+
   const isNew = status === "pending";
   const isScheduled = order.scheduled_at != null;
   const scheduledDate = isScheduled ? new Date(order.scheduled_at) : null;
@@ -111,6 +124,7 @@ export function KanbanOrderCard({
   };
 
   return (
+    <>
     <button
       onClick={onClick}
       className={`w-full rounded-lg border bg-card shadow-sm overflow-hidden transition-all duration-200 hover:shadow-md text-left relative ${
@@ -238,7 +252,7 @@ export function KanbanOrderCard({
                   className="flex-1 h-8 text-xs text-red-600 border-red-300 hover:bg-red-50 dark:text-red-400 dark:border-red-700 dark:hover:bg-red-950/30"
                   onClick={(e) => {
                     e.stopPropagation();
-                    onChangeStatus(order.id, "rejected");
+                    setShowRejectDialog(true);
                   }}
                 >
                   <XCircle className="w-3 h-3 mr-1" />
@@ -329,5 +343,30 @@ export function KanbanOrderCard({
         )}
       </div>
     </button>
+
+    <AlertDialog open={showRejectDialog} onOpenChange={setShowRejectDialog}>
+      <AlertDialogContent onClick={(e) => e.stopPropagation()}>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Recusar pedido #{order.order_number}?</AlertDialogTitle>
+          <AlertDialogDescription>
+            {order.customer_name && `Cliente: ${order.customer_name}. `}
+            Esta ação não pode ser desfeita.
+            {order.payment_status === "paid" && ["pix", "card"].includes(order.payment_method ?? "") &&
+              " O pagamento será estornado automaticamente."
+            }
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancelar</AlertDialogCancel>
+          <AlertDialogAction
+            className="bg-red-600 hover:bg-red-700 text-white"
+            onClick={() => onChangeStatus(order.id, "rejected")}
+          >
+            Confirmar recusa
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    </>
   );
 }
