@@ -25,6 +25,7 @@ interface PaymentSettings {
   card_on_delivery_enabled: boolean;
   card_online_enabled: boolean;
   pix_enabled: boolean;
+  pix_on_delivery_enabled: boolean;
   pix_gateway: string | null;
   pix_gateway_token: string | null;
   mp_public_key: string | null;
@@ -42,6 +43,7 @@ export default function AdminPayments() {
     card_on_delivery_enabled: true,
     card_online_enabled: false,
     pix_enabled: false,
+    pix_on_delivery_enabled: true,
     pix_gateway: null,
     pix_gateway_token: null,
     mp_public_key: null,
@@ -86,7 +88,7 @@ export default function AdminPayments() {
 
     const { data } = await supabase
       .from("restaurants")
-      .select("id, pix_enabled, pix_gateway, pix_gateway_token, cash_enabled, card_on_delivery_enabled, card_online_enabled, mp_public_key")
+      .select("id, pix_enabled, pix_gateway, pix_gateway_token, cash_enabled, card_on_delivery_enabled, card_online_enabled, mp_public_key, pix_on_delivery_enabled")
       .eq("id", ctxRestaurantId)
       .maybeSingle();
 
@@ -97,6 +99,7 @@ export default function AdminPayments() {
         card_on_delivery_enabled: (data as any).card_on_delivery_enabled ?? true,
         card_online_enabled: (data as any).card_online_enabled ?? false,
         pix_enabled: (data as any).pix_enabled ?? false,
+        pix_on_delivery_enabled: (data as any).pix_on_delivery_enabled ?? true,
         pix_gateway: (data as any).pix_gateway ?? null,
         pix_gateway_token: (data as any).pix_gateway_token ?? null,
         mp_public_key: (data as any).mp_public_key ?? null,
@@ -164,6 +167,7 @@ export default function AdminPayments() {
         card_on_delivery_enabled: settings.card_on_delivery_enabled,
         card_online_enabled: settings.card_online_enabled,
         pix_enabled: settings.pix_enabled,
+        pix_on_delivery_enabled: settings.pix_on_delivery_enabled,
       } as any)
       .eq("id", restaurantId);
 
@@ -327,6 +331,29 @@ export default function AdminPayments() {
         </CardHeader>
       </Card>
 
+      {/* PIX on Delivery Section */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-teal-500/10 flex items-center justify-center">
+                <QrCode className="w-5 h-5 text-teal-600" />
+              </div>
+              <div>
+                <CardTitle className="text-lg">PIX na Entrega</CardTitle>
+                <CardDescription>Cliente paga com PIX ao receber, sem geração de QR Code automático</CardDescription>
+              </div>
+            </div>
+            <Switch
+              checked={settings.pix_on_delivery_enabled}
+              onCheckedChange={(checked) =>
+                setSettings((s) => ({ ...s, pix_on_delivery_enabled: checked }))
+              }
+            />
+          </div>
+        </CardHeader>
+      </Card>
+
       {/* Card on Delivery Section */}
       <Card>
         <CardHeader>
@@ -368,6 +395,10 @@ export default function AdminPayments() {
             <Badge variant="outline" className={`gap-1.5 py-1.5 px-3 ${!settings.cash_enabled ? 'opacity-50' : ''}`}>
               <span className={`w-2 h-2 rounded-full ${settings.cash_enabled ? 'bg-green-500' : 'bg-muted-foreground'}`} />
               Dinheiro
+            </Badge>
+            <Badge variant="outline" className={`gap-1.5 py-1.5 px-3 ${!settings.pix_on_delivery_enabled ? 'opacity-50' : ''}`}>
+              <span className={`w-2 h-2 rounded-full ${settings.pix_on_delivery_enabled ? 'bg-green-500' : 'bg-muted-foreground'}`} />
+              PIX na Entrega
             </Badge>
             <Badge variant="outline" className={`gap-1.5 py-1.5 px-3 ${!settings.card_on_delivery_enabled ? 'opacity-50' : ''}`}>
               <span className={`w-2 h-2 rounded-full ${settings.card_on_delivery_enabled ? 'bg-green-500' : 'bg-muted-foreground'}`} />

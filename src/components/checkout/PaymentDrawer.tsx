@@ -42,7 +42,7 @@ interface PaymentDrawerProps {
   schedulingType?: string | null;
 }
 
-type PaymentMethodType = "cash" | "credit_card" | "debit_card" | "pix" | "card_online" | null;
+type PaymentMethodType = "cash" | "credit_card" | "debit_card" | "pix" | "card_online" | "pix_delivery" | null;
 
 export function PaymentDrawer({
   open,
@@ -67,6 +67,7 @@ export function PaymentDrawer({
   const [cashEnabled, setCashEnabled] = useState(true);
   const [cardEnabled, setCardEnabled] = useState(true);
   const [cardOnlineEnabled, setCardOnlineEnabled] = useState(false);
+  const [pixOnDeliveryEnabled, setPixOnDeliveryEnabled] = useState(true);
   const [mpPublicKey, setMpPublicKey] = useState<string | null>(null);
 
   // CPF/CNPJ na nota state
@@ -91,7 +92,7 @@ export function PaymentDrawer({
     if (!restaurantId) return;
     supabase
       .from("restaurants")
-      .select("pix_enabled, pix_gateway, pix_gateway_token, cash_enabled, card_on_delivery_enabled, card_online_enabled, mp_public_key")
+      .select("pix_enabled, pix_gateway, pix_gateway_token, cash_enabled, card_on_delivery_enabled, card_online_enabled, mp_public_key, pix_on_delivery_enabled")
       .eq("id", restaurantId)
       .single()
       .then(({ data }) => {
@@ -103,6 +104,7 @@ export function PaymentDrawer({
           setCardEnabled(d.card_on_delivery_enabled ?? true);
           setCardOnlineEnabled(d.card_online_enabled === true && hasGateway && !!d.mp_public_key);
           setMpPublicKey(d.mp_public_key || null);
+          setPixOnDeliveryEnabled(d.pix_on_delivery_enabled ?? true);
         }
       });
   }, [restaurantId]);
@@ -137,7 +139,8 @@ export function PaymentDrawer({
 
     const isPix = selectedMethod === "pix";
     const isCardOnline = selectedMethod === "card_online";
-    const paymentMethod = isPix || isCardOnline ? "pix" : selectedMethod === "cash" ? "cash" : "card";
+    const isPixDelivery = selectedMethod === "pix_delivery";
+    const paymentMethod = isPix || isCardOnline ? "pix" : selectedMethod === "cash" ? "cash" : isPixDelivery ? "pix_delivery" : "card";
     // For card_online, we use "card" as the DB payment method but with awaiting_payment status
     const dbPaymentMethod = isCardOnline ? "card" : paymentMethod;
 
@@ -182,7 +185,7 @@ export function PaymentDrawer({
         p_customer_phone: customerInfo.phone.replace(/\D/g, ''),
         p_customer_address: addressString || '',
         p_delivery_type: deliveryMethod,
-        p_payment_method: isCardOnline ? 'pix' : (dbPaymentMethod || 'cash'),
+        p_payment_method: isCardOnline ? 'pix' : isPixDelivery ? 'pix_delivery' : (dbPaymentMethod || 'cash'),
         p_items: orderItems,
         p_coupon_code: coupon?.code || null,
         p_notes: selectedMethod === "cash" && cashChange ? `Troco para: ${cashChange}` : null,
@@ -339,6 +342,7 @@ export function PaymentDrawer({
   // Separate methods into delivery and online groups
   const deliveryMethods: { key: PaymentMethodType; label: string; icon: React.ReactNode }[] = [];
   if (cashEnabled) deliveryMethods.push({ key: "cash", label: "Dinheiro", icon: <Banknote className="w-6 h-6" /> });
+  if (pixOnDeliveryEnabled) deliveryMethods.push({ key: "pix_delivery", label: "PIX na Entrega", icon: <QrCode className="w-6 h-6" /> });
   if (cardEnabled) deliveryMethods.push({ key: "credit_card", label: "Crédito", icon: <CreditCard className="w-6 h-6" /> });
   if (cardEnabled) deliveryMethods.push({ key: "debit_card", label: "Débito", icon: <CreditCard className="w-6 h-6" /> });
 
@@ -444,6 +448,16 @@ export function PaymentDrawer({
                   className="h-12 text-base"
                   disabled={isSubmitting}
                 />
+              </div>
+            )}
+
+            {/* PIX na Entrega info */}
+            {selectedMethod === "pix_delivery" && (
+              <div className="flex items-center gap-2 p-3 rounded-lg bg-primary/5 border border-primary/20">
+                <QrCode className="w-4 h-4 text-primary flex-shrink-0" />
+                <p className="text-sm text-muted-foreground">
+                  Pague com PIX quando o pedido chegar. O entregador mostrará a chave ou QR Code.
+                </p>
               </div>
             )}
 
@@ -556,7 +570,7 @@ export function PaymentDrawer({
               </>
             ) : (
               <>
-                {selectedMethod === "pix" ? "Pagar com PIX" : selectedMethod === "card_online" ? "Pagar com Cartão" : "Finalizar pedido"} • {formatCurrency(deliveryMethod === "pickup" || hasFreeShipping ? total : total + deliveryFee)}
+                {selectedMethod === "pix" ? "Pagar com PIX" : selectedMethod === "card_online" ? "Pagar com Cartão" : selectedMethod === "pix_delivery" ? "Finalizar pedido (PIX na Entrega)" : "Finalizar pedido"} • {formatCurrency(deliveryMethod === "pickup" || hasFreeShipping ? total : total + deliveryFee)}
               </>
             )}
           </Button>
