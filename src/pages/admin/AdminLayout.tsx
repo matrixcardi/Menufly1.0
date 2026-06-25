@@ -118,7 +118,7 @@ const salaoItem = { title: "Salão", url: "/admin/salao", icon: ShoppingCart };
 
 const navItems = [
   { title: "CRM", url: "/admin/crm", icon: Users, restrictCollaborator: true },
-  { title: "IA Criativa", url: "/admin/ia", icon: Sparkles, restrictCollaborator: true },
+  { title: "IA Criativa", url: "/admin/ia", icon: Sparkles, restrictCollaborator: true, comingSoon: true },
   { title: "Campanhas", url: "/admin/campanhas", icon: MessageCircle, isWhatsapp: true, restrictCollaborator: true },
   { title: "ADS", url: "/admin/ads", icon: Megaphone, restrictCollaborator: true },
   { title: "WhatsApp Bot", url: "/admin/whatsapp-bot", icon: Bot, isBot: true, requiresElite: true },
@@ -365,13 +365,13 @@ function AdminSidebar({ pendingOrdersCount, isCollaborator, canAccessWhatsAppBot
                     <NavLink
                       to={item.url}
                       end={item.url === "/admin"}
-                      className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-secondary/80 transition-all duration-200"
+                      className={`flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 ${'comingSoon' in item && item.comingSoon ? 'opacity-40 pointer-events-none cursor-not-allowed' : 'hover:bg-secondary/80'}`}
                       activeClassName="bg-primary/10 text-primary font-medium shadow-apple-sm"
                     >
                       <item.icon className={`w-4.5 h-4.5 ${'isWhatsapp' in item && item.isWhatsapp ? 'text-green-600' : ''} ${'isBot' in item && item.isBot ? 'text-foreground' : ''}`} />
                       <span className="flex-1 text-sm">{item.title}</span>
                       {item.title === "IA Criativa" && (
-                        <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 font-bold tracking-wide rounded-full">BETA</Badge>
+                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 rounded-full text-muted-foreground">Em Breve</Badge>
                       )}
                       {'isWhatsapp' in item && item.isWhatsapp && (
                         <span
