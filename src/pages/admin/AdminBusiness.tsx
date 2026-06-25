@@ -682,14 +682,14 @@ export default function AdminBusiness() {
             </div>
             <div className="space-y-2">
               <Label className="flex items-center gap-2">
-                �📱 WhatsApp do Restaurante
+               WhatsApp do Restaurante
               </Label>
               <PhoneInput
                 value={restaurant.whatsapp_phone || ""}
                 onChange={(value) =>
                   setRestaurant({ ...restaurant, whatsapp_phone: value })
                 }
-                placeholder="(11) 9 9999-9999"
+                placeholder="(11) 99999-9999"
               />
               <p className="text-xs text-muted-foreground">
                 Número com DDD usado para o cliente entrar em contato

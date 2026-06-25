@@ -7,40 +7,17 @@ interface PhoneInputProps extends Omit<React.ComponentProps<typeof Input>, "onCh
 }
 
 const formatPhone = (value: string): string => {
-  // Remove all non-digit characters
-  const cleaned = value.replace(/\D/g, "");
-  
-  // Limit to 11 digits (2 DDD + 9 digits)
-  const limited = cleaned.slice(0, 11);
-  
-  if (limited.length === 0) return "";
-  
-  // Apply mask (DD) 9 DDDD-DDDD or (DD) DDDD-DDDD for 10 digits
-  let formatted = "";
-  
-  if (limited.length > 0) {
-    formatted += `(${limited.slice(0, 2)}`;
-  }
-  if (limited.length > 2) {
-    // For 11 digits: (XX) 9 XXXX-XXXX
-    // For 10 digits: (XX) XXXX-XXXX
-    if (limited.length === 11) {
-      formatted += `) ${limited.slice(2, 3)}`;
-    } else {
-      formatted += `) ${limited.slice(2, 6)}`;
-    }
-  }
-  if (limited.length > 3 && limited.length < 11) {
-    formatted += `-${limited.slice(6)}`;
-  } else if (limited.length > 7) {
-    formatted += `-${limited.slice(7)}`;
-  }
-  
-  return formatted;
+  const digits = value.replace(/\D/g, "").slice(0, 11);
+
+  if (digits.length === 0) return "";
+  if (digits.length <= 2) return `(${digits}`;
+  if (digits.length <= 6) return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
+  if (digits.length <= 10) return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`;
+  // 11 dígitos (celular): (XX) XXXXX-XXXX
+  return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
 };
 
 const parsePhone = (formatted: string): string => {
-  // Remove all non-digit characters
   return formatted.replace(/\D/g, "");
 };
 
@@ -53,18 +30,29 @@ export const PhoneInput = forwardRef<HTMLInputElement, PhoneInputProps>(
     }, [value]);
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-      const cleaned = parsePhone(e.target.value);
-      setDisplayValue(formatPhone(cleaned));
-      onChange?.(cleaned);
+      const newRaw = e.target.value;
+      let digits = parsePhone(newRaw);
+      const prevDigits = parsePhone(displayValue);
+
+      // Se o usuário apagou mas a contagem de dígitos não mudou,
+      // ele apagou um caractere da máscara — remove o dígito anterior também
+      if (newRaw.length < displayValue.length && digits.length === prevDigits.length) {
+        digits = digits.slice(0, -1);
+      }
+
+      const formatted = formatPhone(digits);
+      setDisplayValue(formatted);
+      onChange?.(digits);
     };
 
     return (
       <Input
         ref={ref}
         type="text"
+        inputMode="numeric"
         value={displayValue}
         onChange={handleChange}
-        maxLength={15} // (DD) 9 9999-9999 = 15 characters
+        maxLength={15} // (XX) XXXXX-XXXX = 15 chars
         {...props}
       />
     );
