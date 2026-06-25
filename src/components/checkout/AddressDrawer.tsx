@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 // GPS — Radar e Navigation serão reativados futuramente
-import { ArrowLeft, MapPin, Store, ChevronDown, Loader2, Clock } from "lucide-react";
+import { ArrowLeft, MapPin, Store, Loader2, Clock, Search } from "lucide-react";
 // import { Radar, Navigation } from "lucide-react";
 import { z } from "zod";
 import { supabase } from "@/integrations/supabase/client";
@@ -101,25 +101,8 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
   const [zones, setZones] = useState<DeliveryZone[]>([]);
   const [selectedCity, setSelectedCity] = useState("");
   const [selectedZoneId, setSelectedZoneId] = useState("");
+  const [neighborhoodFilter, setNeighborhoodFilter] = useState("");
   const [loadingRestaurant, setLoadingRestaurant] = useState(false);
-
-  // GPS/Radius mode — será implementado futuramente
-  // const [geoLoading, setGeoLoading] = useState(false);
-  // const [geoError, setGeoError] = useState<string | null>(null);
-  // const [userLat, setUserLat] = useState<number | null>(null);
-  // const [userLng, setUserLng] = useState<number | null>(null);
-  // const [distanceKm, setDistanceKm] = useState<number | null>(null);
-  // const [matchedRadiusZone, setMatchedRadiusZone] = useState<DeliveryZone | null>(null);
-  // const [cep, setCep] = useState("");
-  // const [cepLoading, setCepLoading] = useState(false);
-  // const [cepError, setCepError] = useState<string | null>(null);
-  // const [locationSource, setLocationSource] = useState<"gps" | "cep" | null>(null);
-  // const [resolvingAddress, setResolvingAddress] = useState(false);
-  // const [resolvedCity, setResolvedCity] = useState<string>("");
-  // const [resolvedState, setResolvedState] = useState<string>("");
-
-  // Neighborhood mode CEP state
-  const [neighborhoodCep, setNeighborhoodCep] = useState("");
 
   const [address, setAddress] = useState<AddressData>({
     street: "",
@@ -130,7 +113,6 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [showPaymentDrawer, setShowPaymentDrawer] = useState(false);
-  // When both zone types exist, the user must pick which flow to use.
   // "none" = restaurant has no delivery zones configured (plain address form).
   const [locationMode, setLocationMode] = useState<"radius" | "neighborhood" | "none" | null>(null);
 
@@ -185,12 +167,8 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
 
   // Neighborhood zones
   const neighborhoodZones = useMemo(() => zones.filter(z => z.zone_type === "neighborhood"), [zones]);
-  // GPS/Radius — será implementado futuramente
-  // const radiusZones = useMemo(() => zones.filter(z => z.zone_type === "radius").sort((a, b) => (a.min_radius_km || 0) - (b.min_radius_km || 0)), [zones]);
 
   const hasNeighborhoodZones = neighborhoodZones.length > 0;
-  // const hasRadiusZones = radiusZones.length > 0;
-  // const hasBothModes = hasNeighborhoodZones && hasRadiusZones;
 
   // GPS/Radius mode desativado temporariamente — será implementado futuramente
   useEffect(() => {
@@ -203,8 +181,6 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
     else setLocationMode("none");
   }, [hasNeighborhoodZones, deliveryMethod]);
 
-  // const isRadiusMode = locationMode === "radius"; // GPS — será implementado futuramente
-
   // Derive unique cities
   const cities = useMemo(() => {
     const set = new Set<string>();
@@ -212,68 +188,23 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
     return Array.from(set).sort();
   }, [neighborhoodZones]);
 
-  const hasMultipleCities = cities.filter(Boolean).length >= 1;
+  // Only show city selector when there are truly multiple distinct cities
+  const hasMultipleCities = cities.filter(Boolean).length >= 2;
 
   const availableNeighborhoods = useMemo(() => {
     if (!hasMultipleCities) return neighborhoodZones;
     return neighborhoodZones.filter((z) => (z.city || "") === selectedCity);
   }, [neighborhoodZones, selectedCity, hasMultipleCities]);
 
+  const filteredNeighborhoods = useMemo(() =>
+    neighborhoodFilter
+      ? availableNeighborhoods.filter(z =>
+          z.name.toLowerCase().includes(neighborhoodFilter.toLowerCase()))
+      : availableNeighborhoods,
+    [availableNeighborhoods, neighborhoodFilter]
+  );
+
   const selectedZone = zones.find((z) => z.id === selectedZoneId);
-
-  // GPS — será implementado futuramente
-  // const requestGeolocation = () => {
-  //   if (!navigator.geolocation) {
-  //     setGeoError("Seu navegador não suporta geolocalização");
-  //     return;
-  //   }
-  //   setGeoLoading(true);
-  //   setGeoError(null);
-  //   navigator.geolocation.getCurrentPosition(
-  //     (pos) => {
-  //       setUserLat(pos.coords.latitude);
-  //       setUserLng(pos.coords.longitude);
-  //       setGeoLoading(false);
-  //       setLocationSource("gps");
-  //     },
-  //     (err) => {
-  //       setGeoLoading(false);
-  //       if (err.code === err.PERMISSION_DENIED) {
-  //         setGeoError("Permissão de localização negada. Ative o GPS e tente novamente.");
-  //       } else if (err.code === err.POSITION_UNAVAILABLE) {
-  //         setGeoError("Localização indisponível. Verifique seu GPS.");
-  //       } else {
-  //         setGeoError("Não foi possível obter sua localização. Tente novamente.");
-  //       }
-  //     },
-  //     { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 }
-  //   );
-  // };
-
-  const formatCep = (v: string) => {
-    const n = v.replace(/\D/g, "").slice(0, 8);
-    if (n.length <= 5) return n;
-    return `${n.slice(0, 5)}-${n.slice(5)}`;
-  };
-
-  // Neighborhood mode: apply CEP mask only — no auto-lookup
-  const handleNeighborhoodCepChange = (value: string) => {
-    setNeighborhoodCep(formatCep(value));
-  };
-
-  // GPS — será implementado futuramente
-  // const lookupCep = async (rawCep?: string) => { ... };
-
-  // GPS — será implementado futuramente
-  // useEffect calculando distância por haversine removido
-
-  // GPS — será implementado futuramente
-  // useEffect de reverse geocoding removido
-
-  // GPS — será implementado futuramente
-  // const radiusDeliveryFee = ...;
-  // const isOutOfRange = ...;
-  // const maxRadius = ...;
 
   // Check if free shipping threshold is met
   const freeShippingThresholdMet = restaurantData?.free_shipping_threshold && subtotal >= restaurantData.free_shipping_threshold;
@@ -353,20 +284,13 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
         return;
       }
 
-      // GPS/Radius validation — será implementado futuramente
-      // if (locationMode === "radius") { ... }
-
       if (locationMode === "neighborhood") {
-        if (neighborhoodCep.replace(/\D/g, "").length !== 8) {
-          failValidation({ neighborhoodCep: "Informe um CEP válido" }, "neighborhood-cep-field");
-          return;
-        }
         if (hasMultipleCities && !selectedCity) {
           failValidation({ neighborhood: "Selecione sua cidade" }, "zone-select-field");
           return;
         }
         if (!selectedZoneId) {
-          failValidation({ neighborhood: "Selecione o setor/bairro" }, "zone-select-field");
+          failValidation({ neighborhood: "Selecione o setor/bairro de entrega" }, "zone-select-field");
           return;
         }
       }
@@ -397,16 +321,14 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
   useEffect(() => {
     if (open) {
       setErrors({});
-      // setGeoError(null);   // GPS — será implementado futuramente
-      // setCepError(null);   // GPS — será implementado futuramente
     }
   }, [open]);
 
   // Check if scheduling is enabled for the selected delivery method
-  const isSchedulingEnabled = deliveryMethod === "delivery" 
-    ? schedulingConfig?.enabled_delivery 
-    : deliveryMethod === "pickup" 
-      ? schedulingConfig?.enabled_pickup 
+  const isSchedulingEnabled = deliveryMethod === "delivery"
+    ? schedulingConfig?.enabled_delivery
+    : deliveryMethod === "pickup"
+      ? schedulingConfig?.enabled_pickup
       : false;
 
   // Load available slots when date is selected
@@ -459,7 +381,7 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
           timeZone: 'America/Sao_Paulo',
           weekday: 'long'
         }).toLowerCase();
-        
+
         const dayKey = dayOfWeekInBrasilia === "segunda-feira" ? "monday" :
                       dayOfWeekInBrasilia === "terça-feira" ? "tuesday" :
                       dayOfWeekInBrasilia === "quarta-feira" ? "wednesday" :
@@ -520,10 +442,6 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
   const currentNeighborhood = locationMode === "none"
     ? (address.neighborhood || "")
     : (selectedZone?.name || "");
-
-  // GPS — será implementado futuramente
-  // const radiusStreetForOrder = ...;
-  // const radiusNeighborhoodForOrder = ...;
 
   return (
     <>
@@ -780,241 +698,279 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
             {/* Delivery Address Form */}
             {deliveryMethod === "delivery" && (
               <div className="space-y-4">
-                {/* GPS/Radius mode selector — será implementado futuramente */}
-                {/* {hasBothModes && ( ... )} */}
-
-                {/* Hide form fields until a mode is chosen (only matters when both available) */}
                 {locationMode && (
                   <>
-                {/* ─── No Zones Mode: Simple address form ─────────────── */}
-                {locationMode === "none" && (
-                  <>
-                    <div className="space-y-2">
-                      <Label htmlFor="street" className="text-sm font-medium">Rua / Avenida *</Label>
-                      <Input
-                        id="street"
-                        type="text"
-                        autoComplete="address-line1"
-                        enterKeyHint="next"
-                        placeholder="Nome da rua"
-                        value={address.street}
-                        onChange={handleInputChange("street")}
-                        className={`h-12 text-base ${errors.street ? "border-destructive" : ""}`}
-                      />
-                      {errors.street && <p className="text-xs text-destructive">{errors.street}</p>}
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="space-y-2">
-                        <Label htmlFor="number" className="text-sm font-medium">Número *</Label>
-                        <Input
-                          id="number"
-                          type="text"
-                          enterKeyHint="next"
-                          placeholder="Nº"
-                          value={address.number}
-                          onChange={handleInputChange("number")}
-                          className={`h-12 text-base ${errors.number ? "border-destructive" : ""}`}
-                        />
-                        {errors.number && <p className="text-xs text-destructive">{errors.number}</p>}
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="complement" className="text-sm font-medium">Complemento</Label>
-                        <Input
-                          id="complement"
-                          type="text"
-                          autoComplete="address-line2"
-                          enterKeyHint="next"
-                          placeholder="Apto, bloco..."
-                          value={address.complement}
-                          onChange={handleInputChange("complement")}
-                          className="h-12 text-base"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="neighborhood" className="text-sm font-medium">Bairro</Label>
-                      <Input
-                        id="neighborhood"
-                        type="text"
-                        enterKeyHint="next"
-                        placeholder="Bairro"
-                        value={address.neighborhood}
-                        onChange={handleInputChange("neighborhood")}
-                        className="h-12 text-base"
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="reference" className="text-sm font-medium">Ponto de referência</Label>
-                      <Input
-                        id="reference"
-                        type="text"
-                        enterKeyHint="done"
-                        placeholder="Próximo a..."
-                        value={address.reference}
-                        onChange={handleInputChange("reference")}
-                        className="h-12 text-base"
-                      />
-                    </div>
-                  </>
-                )}
-
-                {/* ─── Radius Mode: GPS — será implementado futuramente ─── */}
-                {/* {isRadiusMode && ( ... )} */}
-
-                {/* ─── Zones Mode: City + Neighborhood selects ─── */}
-                {locationMode === "neighborhood" && (
-                  <>
-                    {/* CEP Field — first and triggers auto-fill */}
-                    <div id="neighborhood-cep-field" className="space-y-2">
-                      <Label htmlFor="neighborhood-cep" className="text-sm font-medium">CEP *</Label>
-                      <Input
-                        id="neighborhood-cep"
-                        type="text"
-                        inputMode="numeric"
-                        autoComplete="postal-code"
-                        enterKeyHint="next"
-                        placeholder="00000-000"
-                        value={neighborhoodCep}
-                        onChange={(e) => {
-                          handleNeighborhoodCepChange(e.target.value);
-                          setErrors((prev) => ({ ...prev, neighborhoodCep: "" }));
-                        }}
-                        maxLength={9}
-                        className={`h-12 text-base ${errors.neighborhoodCep ? "border-destructive" : ""}`}
-                      />
-                      {errors.neighborhoodCep && (
-                        <p className="text-xs text-destructive">{errors.neighborhoodCep}</p>
-                      )}
-                    </div>
-
-                    {hasMultipleCities && (
-                      <div className="space-y-2">
-                        <Label className="text-sm font-medium">Cidade *</Label>
-                        <div className="relative">
-                          <select
-                            value={selectedCity}
-                            onChange={(e) => {
-                              setSelectedCity(e.target.value);
-                              setSelectedZoneId("");
-                            }}
-                            className="w-full h-12 text-base rounded-md border border-input bg-background px-3 pr-10 appearance-none focus:outline-none focus:ring-2 focus:ring-ring"
-                          >
-                            <option value="">Selecione sua cidade</option>
-                            {cities.filter(Boolean).map((city) => (
-                              <option key={city} value={city}>{city}</option>
-                            ))}
-                          </select>
-                          <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+                    {/* ─── No Zones Mode: Simple address form ─────────────── */}
+                    {locationMode === "none" && (
+                      <>
+                        <div className="space-y-2">
+                          <Label htmlFor="street" className="text-sm font-medium">Rua / Avenida *</Label>
+                          <Input
+                            id="street"
+                            type="text"
+                            autoComplete="address-line1"
+                            enterKeyHint="next"
+                            placeholder="Nome da rua"
+                            value={address.street}
+                            onChange={handleInputChange("street")}
+                            className={`h-12 text-base ${errors.street ? "border-destructive" : ""}`}
+                          />
+                          {errors.street && <p className="text-xs text-destructive">{errors.street}</p>}
                         </div>
-                      </div>
+
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="space-y-2">
+                            <Label htmlFor="number" className="text-sm font-medium">Número *</Label>
+                            <Input
+                              id="number"
+                              type="text"
+                              enterKeyHint="next"
+                              placeholder="Nº"
+                              value={address.number}
+                              onChange={handleInputChange("number")}
+                              className={`h-12 text-base ${errors.number ? "border-destructive" : ""}`}
+                            />
+                            {errors.number && <p className="text-xs text-destructive">{errors.number}</p>}
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="complement" className="text-sm font-medium">Complemento</Label>
+                            <Input
+                              id="complement"
+                              type="text"
+                              autoComplete="address-line2"
+                              enterKeyHint="next"
+                              placeholder="Apto, bloco..."
+                              value={address.complement}
+                              onChange={handleInputChange("complement")}
+                              className="h-12 text-base"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label htmlFor="neighborhood" className="text-sm font-medium">Bairro</Label>
+                          <Input
+                            id="neighborhood"
+                            type="text"
+                            enterKeyHint="next"
+                            placeholder="Bairro"
+                            value={address.neighborhood}
+                            onChange={handleInputChange("neighborhood")}
+                            className="h-12 text-base"
+                          />
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label htmlFor="reference" className="text-sm font-medium">Ponto de referência</Label>
+                          <Input
+                            id="reference"
+                            type="text"
+                            enterKeyHint="done"
+                            placeholder="Próximo a..."
+                            value={address.reference}
+                            onChange={handleInputChange("reference")}
+                            className="h-12 text-base"
+                          />
+                        </div>
+                      </>
                     )}
 
-                    <div id="zone-select-field" className="space-y-2">
-                      <Label className="text-sm font-medium">Setor/Bairro *</Label>
-                      <div className="relative">
-                        <select
-                          value={selectedZoneId}
-                          onChange={(e) => {
-                            setSelectedZoneId(e.target.value);
-                            setErrors((prev) => ({ ...prev, neighborhood: "" }));
-                          }}
-                          disabled={hasMultipleCities && !selectedCity}
-                          className="w-full h-12 text-base rounded-md border border-input bg-background px-3 pr-10 appearance-none focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
-                        >
-                          <option value="">Selecione seu setor/bairro</option>
-                          {availableNeighborhoods.map((zone) => (
-                            <option key={zone.id} value={zone.id}>
-                              {zone.name} — R$ {zone.fee.toFixed(2)}
-                            </option>
-                          ))}
-                        </select>
-                        <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
-                      </div>
-                      {errors.neighborhood && (
-                        <p className="text-xs text-destructive">{errors.neighborhood}</p>
-                      )}
-                    </div>
+                    {/* ─── Zones Mode: City chips + Neighborhood cards ─── */}
+                    {locationMode === "neighborhood" && (
+                      <>
+                        {/* [A] City chips — only when 2+ distinct cities */}
+                        {hasMultipleCities && (
+                          <div className="space-y-2">
+                            <Label className="text-sm font-medium">Cidade *</Label>
+                            <div className="flex flex-wrap gap-2">
+                              {cities.filter(Boolean).map((city) => (
+                                <button
+                                  key={city}
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedCity(city);
+                                    setSelectedZoneId("");
+                                    setNeighborhoodFilter("");
+                                    setErrors((p) => ({ ...p, neighborhood: "" }));
+                                  }}
+                                  className={`px-4 py-2 rounded-full border-2 text-sm font-medium transition-all ${
+                                    selectedCity === city
+                                      ? "border-primary bg-primary/5 text-primary"
+                                      : "border-border text-muted-foreground hover:border-muted-foreground/50"
+                                  }`}
+                                >
+                                  {city}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
 
-                    {selectedZone && (
-                      <div className="flex items-center gap-2 p-3 rounded-lg bg-primary/5 border border-primary/20">
-                        <MapPin className="w-4 h-4 text-primary flex-shrink-0" />
-                        <p className="text-sm text-muted-foreground">
-                          Taxa de entrega: <span className="font-semibold text-foreground">R$ {selectedZone.fee.toFixed(2)}</span>
-                          {selectedZone.estimated_time_min && (
-                            <> · ~{selectedZone.estimated_time_min} min</>
-                          )}
-                        </p>
-                      </div>
+                        {/* [B] + [C] Neighborhood search + cards */}
+                        {(!hasMultipleCities || selectedCity) && (
+                          <div id="zone-select-field" className="space-y-3">
+                            <Label className="text-sm font-medium">Setor / Bairro *</Label>
+
+                            {/* Search filter — only for large lists */}
+                            {availableNeighborhoods.length > 8 && (
+                              <div className="relative">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+                                <Input
+                                  type="search"
+                                  placeholder="Buscar bairro..."
+                                  value={neighborhoodFilter}
+                                  onChange={(e) => setNeighborhoodFilter(e.target.value)}
+                                  className="h-10 text-base pl-9"
+                                />
+                              </div>
+                            )}
+
+                            {/* Neighborhood cards */}
+                            <div className="space-y-2">
+                              {filteredNeighborhoods.length === 0 ? (
+                                <p className="text-sm text-muted-foreground text-center py-4">
+                                  Nenhum bairro encontrado
+                                </p>
+                              ) : (
+                                filteredNeighborhoods.map((zone) => {
+                                  const isSelected = selectedZoneId === zone.id;
+                                  const isFree = hasFreeShipping || !!freeShippingThresholdMet;
+                                  return (
+                                    <button
+                                      key={zone.id}
+                                      type="button"
+                                      onClick={() => {
+                                        setSelectedZoneId(zone.id);
+                                        setErrors((p) => ({ ...p, neighborhood: "" }));
+                                        setTimeout(() => {
+                                          document.getElementById("address-fields-section")
+                                            ?.scrollIntoView({ behavior: "smooth", block: "start" });
+                                        }, 350);
+                                      }}
+                                      className={`w-full flex items-center justify-between p-4 rounded-lg border-2 transition-all text-left ${
+                                        isSelected
+                                          ? "border-primary bg-primary/5"
+                                          : "border-border hover:border-muted-foreground/30 active:bg-muted/50"
+                                      }`}
+                                    >
+                                      <div className="flex items-center gap-3">
+                                        <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
+                                          isSelected ? "border-primary" : "border-muted-foreground/40"
+                                        }`}>
+                                          {isSelected && (
+                                            <div className="w-2 h-2 rounded-full bg-primary" />
+                                          )}
+                                        </div>
+                                        <span className={`font-medium ${isSelected ? "text-primary" : ""}`}>
+                                          {zone.name}
+                                        </span>
+                                      </div>
+                                      <div className="text-right shrink-0 ml-3">
+                                        {isFree ? (
+                                          <p className="font-semibold text-green-600">Grátis</p>
+                                        ) : (
+                                          <p className={`font-semibold ${isSelected ? "text-primary" : "text-foreground"}`}>
+                                            R$ {zone.fee.toFixed(2)}
+                                          </p>
+                                        )}
+                                        {zone.estimated_time_min && (
+                                          <p className="text-xs text-muted-foreground">~{zone.estimated_time_min} min</p>
+                                        )}
+                                      </div>
+                                    </button>
+                                  );
+                                })
+                              )}
+                            </div>
+
+                            {errors.neighborhood && (
+                              <p className="text-xs text-destructive">{errors.neighborhood}</p>
+                            )}
+                          </div>
+                        )}
+
+                        {/* [D] Selected zone summary banner */}
+                        {selectedZone && (
+                          <div className="flex items-center gap-2 p-3 rounded-lg bg-primary/5 border border-primary/20">
+                            <MapPin className="w-4 h-4 text-primary flex-shrink-0" />
+                            <p className="text-sm text-muted-foreground">
+                              {(hasFreeShipping || freeShippingThresholdMet)
+                                ? <>Entrega em <span className="font-semibold text-foreground">{selectedZone.name}</span> · <span className="font-semibold text-green-600">Grátis</span></>
+                                : <>Taxa de entrega: <span className="font-semibold text-foreground">R$ {selectedZone.fee.toFixed(2)}</span></>
+                              }
+                              {selectedZone.estimated_time_min && (
+                                <> · ~{selectedZone.estimated_time_min} min</>
+                              )}
+                            </p>
+                          </div>
+                        )}
+
+                        {/* [E] Address fields — appear after zone is selected */}
+                        {selectedZoneId && (
+                          <div
+                            id="address-fields-section"
+                            className="animate-in fade-in slide-in-from-bottom-2 duration-300 space-y-4"
+                          >
+                            <div className="space-y-2">
+                              <Label htmlFor="street" className="text-sm font-medium">Rua / Avenida *</Label>
+                              <Input
+                                id="street"
+                                type="text"
+                                autoComplete="address-line1"
+                                enterKeyHint="next"
+                                placeholder="Nome da rua"
+                                value={address.street}
+                                onChange={handleInputChange("street")}
+                                className={`h-12 text-base ${errors.street ? "border-destructive" : ""}`}
+                              />
+                              {errors.street && <p className="text-xs text-destructive">{errors.street}</p>}
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-3">
+                              <div className="space-y-2">
+                                <Label htmlFor="number" className="text-sm font-medium">Número *</Label>
+                                <Input
+                                  id="number"
+                                  type="text"
+                                  enterKeyHint="next"
+                                  placeholder="Nº"
+                                  value={address.number}
+                                  onChange={handleInputChange("number")}
+                                  className={`h-12 text-base ${errors.number ? "border-destructive" : ""}`}
+                                />
+                                {errors.number && <p className="text-xs text-destructive">{errors.number}</p>}
+                              </div>
+                              <div className="space-y-2">
+                                <Label htmlFor="complement" className="text-sm font-medium">Complemento</Label>
+                                <Input
+                                  id="complement"
+                                  type="text"
+                                  autoComplete="address-line2"
+                                  enterKeyHint="next"
+                                  placeholder="Apto, bloco..."
+                                  value={address.complement}
+                                  onChange={handleInputChange("complement")}
+                                  className="h-12 text-base"
+                                />
+                              </div>
+                            </div>
+
+                            <div className="space-y-2">
+                              <Label htmlFor="reference" className="text-sm font-medium">Ponto de referência</Label>
+                              <Input
+                                id="reference"
+                                type="text"
+                                enterKeyHint="done"
+                                placeholder="Próximo a..."
+                                value={address.reference}
+                                onChange={handleInputChange("reference")}
+                                className="h-12 text-base"
+                              />
+                            </div>
+                          </div>
+                        )}
+                      </>
                     )}
-                  </>
-                )}
-
-                {locationMode === "neighborhood" && (
-                  <>
-                    {/* Street Field */}
-                    <div className="space-y-2">
-                      <Label htmlFor="street" className="text-sm font-medium">Rua / Avenida *</Label>
-                      <Input
-                        id="street"
-                        type="text"
-                        autoComplete="address-line1"
-                        enterKeyHint="next"
-                        placeholder="Nome da rua"
-                        value={address.street}
-                        onChange={handleInputChange("street")}
-                        className={`h-12 text-base ${errors.street ? "border-destructive" : ""}`}
-                      />
-                      {errors.street && <p className="text-xs text-destructive">{errors.street}</p>}
-                    </div>
-
-                    {/* Number and Complement Row */}
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="space-y-2">
-                        <Label htmlFor="number" className="text-sm font-medium">Número *</Label>
-                        <Input
-                          id="number"
-                          type="text"
-                          enterKeyHint="next"
-                          placeholder="Nº"
-                          value={address.number}
-                          onChange={handleInputChange("number")}
-                          className={`h-12 text-base ${errors.number ? "border-destructive" : ""}`}
-                        />
-                        {errors.number && <p className="text-xs text-destructive">{errors.number}</p>}
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="complement" className="text-sm font-medium">Complemento</Label>
-                        <Input
-                          id="complement"
-                          type="text"
-                          autoComplete="address-line2"
-                          enterKeyHint="next"
-                          placeholder="Apto, bloco..."
-                          value={address.complement}
-                          onChange={handleInputChange("complement")}
-                          className="h-12 text-base"
-                        />
-                      </div>
-                    </div>
-
-                    {/* Reference Field */}
-                    <div className="space-y-2">
-                      <Label htmlFor="reference" className="text-sm font-medium">Ponto de referência</Label>
-                      <Input
-                        id="reference"
-                        type="text"
-                        enterKeyHint="done"
-                        placeholder="Próximo a..."
-                        value={address.reference}
-                        onChange={handleInputChange("reference")}
-                        className="h-12 text-base"
-                      />
-                    </div>
-                  </>
-                )}
                   </>
                 )}
               </div>
@@ -1047,7 +1003,6 @@ export function AddressDrawer({ open, onOpenChange, onBack, customerInfo, restau
                 neighborhood: currentNeighborhood,
                 complement: address.complement || undefined,
                 reference: address.reference || undefined,
-                cep: neighborhoodCep || undefined,
               }
             : undefined
         }
