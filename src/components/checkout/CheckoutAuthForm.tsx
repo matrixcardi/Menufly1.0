@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Mail, Lock, Loader2, User, CheckCircle } from "lucide-react";
+import { Mail, Lock, Loader2, User, CheckCircle, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { validateEmail, validateName } from "@/lib/validations";
 import { translateError } from "@/lib/error-messages";
@@ -20,23 +20,20 @@ export default function CheckoutAuthForm({ onAuthenticated }: CheckoutAuthFormPr
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<{ email?: string; fullName?: string }>({});
   const [awaitingConfirmation, setAwaitingConfirmation] = useState(false);
+  const [verifyLoading, setVerifyLoading] = useState(false);
+  const [resendLoading, setResendLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    // Validate fields
     const fieldErrors: { email?: string; fullName?: string } = {};
-    
+
     const emailValidation = validateEmail(email);
-    if (!emailValidation.valid) {
-      fieldErrors.email = emailValidation.error;
-    }
+    if (!emailValidation.valid) fieldErrors.email = emailValidation.error;
 
     if (mode === "signup") {
       const nameValidation = validateName(fullName);
-      if (!nameValidation.valid) {
-        fieldErrors.fullName = nameValidation.error;
-      }
+      if (!nameValidation.valid) fieldErrors.fullName = nameValidation.error;
     }
 
     if (Object.keys(fieldErrors).length > 0) {
@@ -59,42 +56,115 @@ export default function CheckoutAuthForm({ onAuthenticated }: CheckoutAuthFormPr
         if (error) throw error;
         setAwaitingConfirmation(true);
       } else {
-        const { error } = await supabase.auth.signInWithPassword({
-          email,
-          password,
-        });
-        if (error) throw error;
+        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) {
+          if (error.message === "Email not confirmed") {
+            setAwaitingConfirmation(true);
+            return;
+          }
+          throw error;
+        }
         onAuthenticated();
       }
     } catch (error: any) {
-      const translatedError = translateError(error);
-      toast.error(translatedError);
-      if (error.message?.includes("already registered")) {
-        setMode("login");
-      }
+      toast.error(translateError(error));
+      if (error.message?.includes("already registered")) setMode("login");
     } finally {
       setLoading(false);
     }
   };
 
+  const handleVerifyCheck = async () => {
+    setVerifyLoading(true);
+    try {
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) {
+        if (error.message === "Email not confirmed") {
+          toast.error("Email ainda não confirmado. Verifique sua caixa de entrada.");
+        } else {
+          toast.error(translateError(error));
+        }
+        return;
+      }
+      onAuthenticated();
+    } finally {
+      setVerifyLoading(false);
+    }
+  };
+
+  const handleResend = async () => {
+    setResendLoading(true);
+    try {
+      const { error } = await supabase.auth.resend({
+        type: "signup",
+        email,
+        options: { emailRedirectTo: `${window.location.origin}/checkout` },
+      });
+      if (error) throw error;
+      toast.success("Email reenviado! Verifique sua caixa de entrada.");
+    } catch {
+      toast.error("Não foi possível reenviar o email. Tente novamente.");
+    } finally {
+      setResendLoading(false);
+    }
+  };
+
   if (awaitingConfirmation) {
     return (
-      <div className="text-center space-y-4 py-4">
-        <div className="w-14 h-14 rounded-full bg-primary/10 flex items-center justify-center mx-auto">
-          <Mail className="w-7 h-7 text-primary" />
+      <div className="text-center space-y-5 py-2">
+        <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto">
+          <Mail className="w-8 h-8 text-primary" />
         </div>
-        <div className="space-y-1.5">
-          <p className="font-semibold">Confirme seu email para continuar</p>
-          <p className="text-sm text-muted-foreground">
-            Enviamos um link para{" "}
-            <span className="font-medium text-foreground">{email}</span>.
-            Clique nele e você voltará automaticamente para finalizar sua assinatura.
+
+        <div className="space-y-2">
+          <p className="font-bold text-base">Confirme seu email para continuar</p>
+          <p className="text-sm text-muted-foreground leading-relaxed">
+            Enviamos um link de confirmação para{" "}
+            <span className="font-semibold text-foreground">{email}</span>.
+            Clique nele e você voltará automaticamente para esta página.
           </p>
         </div>
-        <div className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground bg-muted/50 rounded-xl p-3">
-          <CheckCircle className="w-3.5 h-3.5 text-green-500 flex-shrink-0" />
-          Após confirmar, esta página carregará o pagamento automaticamente
+
+        <div className="bg-muted/50 rounded-xl p-3 text-left space-y-1.5">
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <CheckCircle className="w-3.5 h-3.5 text-green-500 flex-shrink-0" />
+            Verifique sua caixa de entrada e a pasta de spam
+          </div>
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <CheckCircle className="w-3.5 h-3.5 text-green-500 flex-shrink-0" />
+            Após confirmar, o pagamento carrega automaticamente
+          </div>
         </div>
+
+        <div className="space-y-2.5">
+          <Button
+            className="w-full rounded-xl h-10"
+            onClick={handleVerifyCheck}
+            disabled={verifyLoading}
+          >
+            {verifyLoading ? (
+              <Loader2 className="w-4 h-4 animate-spin mr-2" />
+            ) : (
+              <CheckCircle className="w-4 h-4 mr-2" />
+            )}
+            Já verifiquei meu email
+          </Button>
+
+          <Button
+            variant="outline"
+            className="w-full rounded-xl h-9 text-sm"
+            onClick={handleResend}
+            disabled={resendLoading}
+          >
+            {resendLoading ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin mr-2" />
+            ) : (
+              <RefreshCw className="w-3.5 h-3.5 mr-2" />
+            )}
+            Reenviar email de confirmação
+          </Button>
+        </div>
+
         <button
           type="button"
           onClick={() => setAwaitingConfirmation(false)}
@@ -181,9 +251,7 @@ export default function CheckoutAuthForm({ onAuthenticated }: CheckoutAuthFormPr
         </div>
 
         <Button type="submit" className="w-full rounded-xl h-10" disabled={loading}>
-          {loading ? (
-            <Loader2 className="w-4 h-4 animate-spin mr-2" />
-          ) : null}
+          {loading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
           {mode === "signup" ? "Criar conta e continuar" : "Entrar e continuar"}
         </Button>
       </form>
