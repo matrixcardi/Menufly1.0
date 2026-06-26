@@ -87,9 +87,10 @@ export default function Checkout() {
   const plan = plans[selectedPlan];
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
-      setIsAuthenticated(!!data.user);
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setIsAuthenticated(!!session?.user);
     });
+    return () => subscription.unsubscribe();
   }, []);
 
   const loadCheckout = useCallback(async (planToLoad: PlanType, withImplementation: boolean) => {

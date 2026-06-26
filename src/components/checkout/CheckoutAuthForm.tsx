@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Mail, Lock, Loader2, User } from "lucide-react";
+import { Mail, Lock, Loader2, User, CheckCircle } from "lucide-react";
 import { toast } from "sonner";
 import { validateEmail, validateName } from "@/lib/validations";
 import { translateError } from "@/lib/error-messages";
@@ -19,6 +19,7 @@ export default function CheckoutAuthForm({ onAuthenticated }: CheckoutAuthFormPr
   const [fullName, setFullName] = useState("");
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<{ email?: string; fullName?: string }>({});
+  const [awaitingConfirmation, setAwaitingConfirmation] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -52,12 +53,11 @@ export default function CheckoutAuthForm({ onAuthenticated }: CheckoutAuthFormPr
           password,
           options: {
             data: { full_name: fullName },
-            emailRedirectTo: window.location.origin,
+            emailRedirectTo: `${window.location.origin}/checkout`,
           },
         });
         if (error) throw error;
-        toast.success("Conta criada com sucesso!");
-        onAuthenticated();
+        setAwaitingConfirmation(true);
       } else {
         const { error } = await supabase.auth.signInWithPassword({
           email,
@@ -76,6 +76,35 @@ export default function CheckoutAuthForm({ onAuthenticated }: CheckoutAuthFormPr
       setLoading(false);
     }
   };
+
+  if (awaitingConfirmation) {
+    return (
+      <div className="text-center space-y-4 py-4">
+        <div className="w-14 h-14 rounded-full bg-primary/10 flex items-center justify-center mx-auto">
+          <Mail className="w-7 h-7 text-primary" />
+        </div>
+        <div className="space-y-1.5">
+          <p className="font-semibold">Confirme seu email para continuar</p>
+          <p className="text-sm text-muted-foreground">
+            Enviamos um link para{" "}
+            <span className="font-medium text-foreground">{email}</span>.
+            Clique nele e você voltará automaticamente para finalizar sua assinatura.
+          </p>
+        </div>
+        <div className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground bg-muted/50 rounded-xl p-3">
+          <CheckCircle className="w-3.5 h-3.5 text-green-500 flex-shrink-0" />
+          Após confirmar, esta página carregará o pagamento automaticamente
+        </div>
+        <button
+          type="button"
+          onClick={() => setAwaitingConfirmation(false)}
+          className="text-xs text-muted-foreground hover:text-foreground underline"
+        >
+          Usar outro email
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
