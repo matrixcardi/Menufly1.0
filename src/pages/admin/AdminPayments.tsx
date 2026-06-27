@@ -37,7 +37,6 @@ export default function AdminPayments() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
-  const [restaurantId, setRestaurantId] = useState<string | null>(null);
   const [settings, setSettings] = useState<PaymentSettings>({
     cash_enabled: true,
     card_on_delivery_enabled: true,
@@ -93,7 +92,6 @@ export default function AdminPayments() {
       .maybeSingle();
 
     if (data) {
-      setRestaurantId(data.id);
       setSettings({
         cash_enabled: (data as any).cash_enabled ?? true,
         card_on_delivery_enabled: (data as any).card_on_delivery_enabled ?? true,
@@ -115,11 +113,11 @@ export default function AdminPayments() {
   const [connectingMP, setConnectingMP] = useState(false);
 
   const handleConnectMP = async () => {
-    if (!restaurantId) return;
+    if (!ctxRestaurantId) return;
     setConnectingMP(true);
     try {
       const { data, error } = await supabase.functions.invoke("mercadopago-auth-url", {
-        body: { restaurant_id: restaurantId },
+        body: { restaurant_id: ctxRestaurantId },
       });
       if (error || !data?.url) {
         toast({ title: "Erro ao gerar link de conexão", variant: "destructive" });
@@ -134,7 +132,7 @@ export default function AdminPayments() {
   };
 
   const handleDisconnectMP = async () => {
-    if (!restaurantId) return;
+    if (!ctxRestaurantId) return;
     setDisconnecting(true);
 
     const { error } = await supabase
@@ -144,7 +142,7 @@ export default function AdminPayments() {
         pix_gateway_token: null,
         pix_enabled: false,
       } as any)
-      .eq("id", restaurantId);
+      .eq("id", ctxRestaurantId);
 
     setDisconnecting(false);
 
@@ -157,7 +155,7 @@ export default function AdminPayments() {
   };
 
   const handleSave = async () => {
-    if (!restaurantId) return;
+    if (!ctxRestaurantId) return;
     setSaving(true);
 
     const { error } = await supabase
@@ -169,7 +167,7 @@ export default function AdminPayments() {
         pix_enabled: settings.pix_enabled,
         pix_on_delivery_enabled: settings.pix_on_delivery_enabled,
       } as any)
-      .eq("id", restaurantId);
+      .eq("id", ctxRestaurantId);
 
     setSaving(false);
 
