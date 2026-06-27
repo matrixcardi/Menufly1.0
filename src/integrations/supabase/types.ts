@@ -1905,6 +1905,7 @@ export type Database = {
           pix_gateway: string | null
           pix_gateway_token: string | null
           pix_key: string | null
+          pix_on_delivery_enabled: boolean
           restaurant_lat: number | null
           restaurant_lng: number | null
           slug: string
@@ -1974,6 +1975,7 @@ export type Database = {
           pix_gateway?: string | null
           pix_gateway_token?: string | null
           pix_key?: string | null
+          pix_on_delivery_enabled?: boolean
           restaurant_lat?: number | null
           restaurant_lng?: number | null
           slug: string
@@ -2043,6 +2045,7 @@ export type Database = {
           pix_gateway?: string | null
           pix_gateway_token?: string | null
           pix_key?: string | null
+          pix_on_delivery_enabled?: boolean
           restaurant_lat?: number | null
           restaurant_lng?: number | null
           slug?: string

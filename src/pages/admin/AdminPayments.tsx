@@ -140,7 +140,7 @@ export default function AdminPayments() {
       .update({
         pix_gateway: null,
         pix_gateway_token: null,
-        pix_enabled: false,
+        pix_enabled: false, 
       } as any)
       .eq("id", ctxRestaurantId);
 
