@@ -136,9 +136,13 @@ async function trackServerEvent(
     hashedUserData.country = await sha256("br"); // Default to Brazil
   }
 
+  const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
   fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${anonKey}`,
+    },
     body: JSON.stringify({
       restaurant_id: restaurantId,
       event_name: eventName,
