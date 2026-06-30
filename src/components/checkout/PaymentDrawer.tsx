@@ -144,27 +144,15 @@ export function PaymentDrawer({
     // For card_online, we use "card" as the DB payment method but with awaiting_payment status
     const dbPaymentMethod = isCardOnline ? "card" : paymentMethod;
 
-    // [DEBUG T5] Supabase client config
-    console.log("[DEBUG T5] supabase URL:", import.meta.env.VITE_SUPABASE_URL);
-    console.log("[DEBUG T5] supabase KEY presente:", !!import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY);
-
-    // [DEBUG T3] restaurantId antes do guard
-    console.log("[DEBUG T3] restaurantId:", restaurantId);
-
     const contentIds = items.map((item) => item.product?.id || item.id);
 
-    // [DEBUG T4] trackAddPaymentInfo — envolto em try para capturar exceção fora do bloco principal
-    try {
-      trackAddPaymentInfo(
-        total,
-        paymentMethod || "unknown",
-        restaurantId,
-        { phone: customerInfo.phone, name: customerInfo.name },
-        contentIds
-      );
-    } catch (pixelErr) {
-      console.error("[DEBUG T4] trackAddPaymentInfo lançou exceção:", pixelErr);
-    }
+    trackAddPaymentInfo(
+      total,
+      paymentMethod || "unknown",
+      restaurantId,
+      { phone: customerInfo.phone, name: customerInfo.name },
+      contentIds
+    );
 
     if (!restaurantId) {
       toast.error("Erro ao enviar pedido", {
@@ -176,13 +164,6 @@ export function PaymentDrawer({
     setIsSubmitting(true);
 
     try {
-      // [DEBUG T1+T2] inspecionar cada item do carrinho antes do map
-      console.log("[DEBUG T1+T2] items do carrinho:", items.length, "itens");
-      items.forEach((item, i) => {
-        console.log(`[DEBUG T1] item[${i}].product:`, item.product);
-        console.log(`[DEBUG T2] item[${i}].unitPrice:`, item.unitPrice, "| product.price:", item.product?.price, "| addonsTotal seria:", item.unitPrice - (item.product?.price ?? NaN));
-      });
-
       const orderItems = items.map(item => ({
         productId: item.product.id,
         name: item.product.name,
@@ -193,8 +174,6 @@ export function PaymentDrawer({
         addonsTotal: item.unitPrice - item.product.price,
         notes: item.notes || null,
       }));
-
-      console.log("[DEBUG] orderItems montado com sucesso:", JSON.stringify(orderItems));
 
       const addressString = address
         ? `${address.street}, ${address.number}${address.complement ? ` - ${address.complement}` : ''}, ${address.neighborhood}${address.cep ? ` - CEP ${address.cep}` : ''}${address.reference ? ` (Ref: ${address.reference})` : ''}`

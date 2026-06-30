@@ -25,7 +25,13 @@ export const ERROR_MESSAGES: Record<string, string> = {
     'Muitas tentativas. Aguarde alguns minutos antes de tentar novamente.',
   
   // ============ DATABASE ============
-  'duplicate key value violates unique constraint': 
+  'Produto não encontrado':
+    'Um ou mais itens do seu carrinho não estão mais disponíveis. Atualize o cardápio e tente novamente.',
+
+  'Produto inválido ou indisponível':
+    'Um ou mais itens do seu carrinho não estão mais disponíveis. Atualize o cardápio e tente novamente.',
+
+  'duplicate key value violates unique constraint':
     'Este registro já existe no sistema.',
   
   'violates foreign key constraint': 
