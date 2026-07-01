@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Tables } from "@/integrations/supabase/types";
@@ -14,6 +14,7 @@ interface FiscalConfig {
   is_active: boolean;
   provider: string;
   environment: string;
+  auto_issue_mode?: string;
 }
 
 /**
@@ -39,6 +40,10 @@ export function useLiveOrders(cashRegisterOpen: boolean) {
   // Fiscal state
   const [fiscalConfig, setFiscalConfig] = useState<FiscalConfig | null>(null);
   const [fiscalInvoices, setFiscalInvoices] = useState<Record<string, any>>({});
+  // Ref para evitar stale closure dentro do listener de realtime (que só é
+  // recriado quando selectedRestaurantIds/notificationSound/restaurants mudam).
+  const fiscalConfigRef = useRef<FiscalConfig | null>(null);
+  useEffect(() => { fiscalConfigRef.current = fiscalConfig; }, [fiscalConfig]);
 
   // Derived values
   const restaurantId = selectedRestaurant?.id || (selectedRestaurantIds.length === 1 ? selectedRestaurantIds[0] : null);
@@ -115,8 +120,8 @@ export function useLiveOrders(cashRegisterOpen: boolean) {
       if (!restaurantId) return;
 
       const { data } = await supabase
-        .from("fiscal_config")
-        .select("is_configured, is_active, provider, environment")
+        .from("fiscal_config" as any)
+        .select("is_configured, is_active, provider, environment, auto_issue_mode")
         .eq("restaurant_id", restaurantId)
         .maybeSingle();
 
@@ -133,7 +138,7 @@ export function useLiveOrders(cashRegisterOpen: boolean) {
     if (!orderIds.length || !restaurantId) return;
 
     const { data } = await supabase
-      .from("fiscal_invoices")
+      .from("fiscal_invoices" as any)
       .select("*")
       .in("order_id", orderIds)
       .eq("restaurant_id", restaurantId);
@@ -242,6 +247,20 @@ export function useLiveOrders(cashRegisterOpen: boolean) {
             if (localStorage.getItem("autoPrintOrders") === "true") setTimeout(() => printOrder(updated, restName), 500);
           }
 
+          // Emissão automática de NFC-e: dispara quando o pagamento é confirmado
+          // (pix/cartão na hora, ou dinheiro quando o motoboy confirma o recebimento),
+          // desde que o restaurante tenha ativado o modo automático.
+          const justGotPaid = oldOrder && oldOrder.payment_status !== "paid" && updated.payment_status === "paid";
+          const cfg = fiscalConfigRef.current;
+          if (justGotPaid && cfg?.is_active && cfg.auto_issue_mode === "automatic" && updated.status !== "cancelled" && updated.status !== "rejected") {
+            supabase.functions.invoke("spedy-issue-invoice", { body: { order_id: updated.id } })
+              .then(({ data, error: fnErr }) => {
+                if (fnErr || data?.error) {
+                  console.error("[spedy] emissão automática falhou:", fnErr || data?.error);
+                }
+              });
+          }
+
           return prev.map((o) => o.id === updated.id ? updated : o);
         });
       } else if (payload.eventType === "DELETE") {
@@ -253,6 +272,20 @@ export function useLiveOrders(cashRegisterOpen: boolean) {
     const channels = selectedRestaurantIds.map((rid, idx) =>
       supabase.channel(`orders-realtime-${rid}-${idx}`)
         .on("postgres_changes", { event: "*", schema: "public", table: "orders", filter: `restaurant_id=eq.${rid}` }, handleRealtimePayload)
+        .subscribe()
+    );
+
+    // Reflete no Kanban as atualizações de status de NFC-e que chegam via
+    // spedy-webhook/spedy-poll-invoice-status (gravadas com service role,
+    // então o client só fica sabendo através do Realtime, não de um retorno
+    // de mutation local).
+    const fiscalChannels = selectedRestaurantIds.map((rid, idx) =>
+      supabase.channel(`fiscal-invoices-realtime-${rid}-${idx}`)
+        .on("postgres_changes", { event: "*", schema: "public", table: "fiscal_invoices", filter: `restaurant_id=eq.${rid}` }, (payload: any) => {
+          if (payload.eventType === "DELETE") return;
+          const invoice = payload.new;
+          setFiscalInvoices((prev) => ({ ...prev, [invoice.order_id]: invoice }));
+        })
         .subscribe()
     );
 
@@ -283,6 +316,7 @@ export function useLiveOrders(cashRegisterOpen: boolean) {
 
     return () => {
       channels.forEach(ch => supabase.removeChannel(ch));
+      fiscalChannels.forEach(ch => supabase.removeChannel(ch));
       clearInterval(pollInterval);
       setKeepAliveCallback(null);
     };

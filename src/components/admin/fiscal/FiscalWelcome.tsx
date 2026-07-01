@@ -35,11 +35,11 @@ export const FiscalWelcome = ({ onConfigure }: FiscalWelcomeProps) => {
             </li>
             <li className="flex items-start gap-2">
               <Check className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-              <span className="text-sm">Certificado Digital A1 (.pfx)</span>
+              <span className="text-sm">Uma conta na Spedy com certificado digital A1 já configurado</span>
             </li>
             <li className="flex items-start gap-2">
               <Check className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-              <span className="text-sm">5 minutos do seu tempo</span>
+              <span className="text-sm">Chave de API da Spedy (Perfil {'>'} Minha Empresa {'>'} Credenciais da API)</span>
             </li>
           </ul>
 

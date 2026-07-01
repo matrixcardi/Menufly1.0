@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardFooter } from "@/components/ui/card"
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
+import { Label } from "@/components/ui/label";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -13,7 +14,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Check, X, FileText, RefreshCcw } from "lucide-react";
+import { Check, X, FileText, Webhook } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { maskCpfCnpj } from "@/utils/cpfCnpj";
@@ -31,62 +32,55 @@ export default function FiscalStatus({ config, onRefresh, onEdit }: FiscalStatus
 
   const isActive = config.is_active;
 
+  const updateSettings = async (payload: Record<string, unknown>) => {
+    setLoading(true);
+    try {
+      const { error } = await supabase.functions.invoke("spedy-update-settings", {
+        body: { restaurant_id: config.restaurant_id, ...payload },
+      });
+      if (error) throw error;
+      onRefresh();
+    } catch (error: any) {
+      toast({ title: "Erro ao atualizar configuração", description: error.message, variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleToggleActive = async (newValue: boolean) => {
     if (newValue === false) {
       setShowDeactivateConfirm(true);
       return;
     }
-
-    setLoading(true);
-    try {
-      const { error } = await supabase
-        .from("fiscal_config")
-        .update({ is_active: true })
-        .eq("restaurant_id", config.restaurant_id);
-
-      if (error) throw error;
-
-      console.log("[FISCAL] is_active alterado para:", true);
-      toast({ title: "✓ Emissão fiscal ativada" });
-      onRefresh();
-    } catch (error) {
-      console.error("[FISCAL] Erro ao ativar:", error);
-      toast({ title: "Erro ao ativar emissão fiscal", variant: "destructive" });
-    } finally {
-      setLoading(false);
-    }
+    await updateSettings({ is_active: true });
+    toast({ title: "✓ Emissão fiscal ativada" });
   };
 
   const handleConfirmDeactivate = async () => {
     setShowDeactivateConfirm(false);
+    await updateSettings({ is_active: false });
+    toast({ title: "Emissão fiscal desativada" });
+  };
+
+  const handleAutoIssueModeChange = async (automatic: boolean) => {
+    await updateSettings({ auto_issue_mode: automatic ? "automatic" : "manual" });
+    toast({ title: automatic ? "Emissão automática ativada" : "Emissão manual ativada" });
+  };
+
+  const handleReconnectWebhook = async () => {
     setLoading(true);
     try {
-      const { error } = await supabase
-        .from("fiscal_config")
-        .update({ is_active: false })
-        .eq("restaurant_id", config.restaurant_id);
-
+      const { error } = await supabase.functions.invoke("spedy-register-webhook", {
+        body: { restaurant_id: config.restaurant_id },
+      });
       if (error) throw error;
-
-      console.log("[FISCAL] is_active alterado para:", false);
-      toast({ title: "Emissão fiscal desativada" });
+      toast({ title: "✓ Webhook reconectado com a Spedy" });
       onRefresh();
-    } catch (error) {
-      console.error("[FISCAL] Erro ao desativar:", error);
-      toast({ title: "Erro ao desativar emissão fiscal", variant: "destructive" });
+    } catch (error: any) {
+      toast({ title: "Erro ao reconectar webhook", description: error.message, variant: "destructive" });
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleEdit = () => {
-    console.log("[FISCAL] Editar configurações");
-    onEdit();
-  };
-
-  const handleUpdateCertificate = () => {
-    console.log("[FISCAL] Atualizar certificado");
-    onEdit();
   };
 
   return (
@@ -102,7 +96,7 @@ export default function FiscalStatus({ config, onRefresh, onEdit }: FiscalStatus
           <div>
             <CardHeader className="p-0 pb-2">
               <h2 className="text-2xl font-bold">Configuração Fiscal</h2>
-              <p className="text-muted-foreground">Sua emissão de NFCe está configurada</p>
+              <p className="text-muted-foreground">Sua emissão de NFCe via Spedy está configurada</p>
             </CardHeader>
           </div>
           <Badge
@@ -150,50 +144,47 @@ export default function FiscalStatus({ config, onRefresh, onEdit }: FiscalStatus
               </div>
             </div>
 
-            {/* Column 2: Statistics & Certificate */}
+            {/* Column 2: Spedy connection */}
             <div className="space-y-4">
-              <h3 className="font-semibold text-lg">Estatísticas</h3>
+              <h3 className="font-semibold text-lg">Conexão com a Spedy</h3>
               <div className="space-y-3">
                 <div>
-                  <span className="text-sm text-muted-foreground">Notas emitidas hoje:</span>
-                  <p className="font-medium text-2xl">0</p>
+                  <span className="text-sm text-muted-foreground">Ambiente:</span>
+                  <p className="font-medium">
+                    {config.environment === "development" ? "Sandbox (testes)" : "Produção"}
+                  </p>
                 </div>
                 <div>
-                  <span className="text-sm text-muted-foreground">Notas emitidas no mês:</span>
-                  <p className="font-medium text-2xl">0</p>
+                  <span className="text-sm text-muted-foreground">Webhook de status:</span>
+                  <p className="font-medium flex items-center gap-2">
+                    {config.webhook_id ? (
+                      <Badge className="bg-green-600 hover:bg-green-700">Conectado</Badge>
+                    ) : (
+                      <Badge variant="destructive">Não conectado</Badge>
+                    )}
+                  </p>
                 </div>
                 <div>
-                  <span className="text-sm text-muted-foreground">Última emissão:</span>
-                  <p className="font-medium text-muted-foreground">Nenhuma ainda</p>
+                  <span className="text-sm text-muted-foreground">NCM padrão:</span>
+                  <p className="font-medium">{config.default_ncm}</p>
                 </div>
               </div>
 
-              <h3 className="font-semibold text-lg pt-4">Certificado Digital</h3>
-              <div className="space-y-2">
+              <h3 className="font-semibold text-lg pt-4">Modo de Emissão</h3>
+              <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
                 <div>
-                  <span className="text-sm text-muted-foreground">Arquivo:</span>
-                  <p className="font-medium text-sm">{config.certificado_nome_arquivo || "certificado.pfx"}</p>
+                  <Label className="text-sm">Emissão automática</Label>
+                  <p className="text-xs text-muted-foreground">
+                    {config.auto_issue_mode === "automatic"
+                      ? "Emite ao confirmar o pagamento"
+                      : "Só emite ao clicar em 'Emitir NFe'"}
+                  </p>
                 </div>
-                <div>
-                  <span className="text-sm text-muted-foreground">Status:</span>
-                  {(() => {
-                    if (!config.certificado_valido_ate) {
-                      return <Badge variant="secondary" className="ml-2">Aguardando validação</Badge>;
-                    }
-                    
-                    const validUntil = new Date(config.certificado_valido_ate);
-                    const today = new Date();
-                    const daysUntilExpiry = Math.ceil((validUntil.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-                    
-                    if (daysUntilExpiry < 0) {
-                      return <Badge variant="destructive" className="ml-2">VENCIDO</Badge>;
-                    } else if (daysUntilExpiry < 30) {
-                      return <Badge className="ml-2 bg-orange-500 hover:bg-orange-600">Vence em {daysUntilExpiry} dias</Badge>;
-                    } else {
-                      return <Badge className="ml-2 bg-green-600 hover:bg-green-700">Válido até {validUntil.toLocaleDateString('pt-BR')}</Badge>;
-                    }
-                  })()}
-                </div>
+                <Switch
+                  checked={config.auto_issue_mode === "automatic"}
+                  onCheckedChange={handleAutoIssueModeChange}
+                  disabled={loading}
+                />
               </div>
             </div>
           </div>
@@ -204,7 +195,7 @@ export default function FiscalStatus({ config, onRefresh, onEdit }: FiscalStatus
               <span className="font-medium text-lg">Emissão Ativa</span>
               <p className="text-sm text-muted-foreground">
                 {isActive
-                  ? "As notas serão emitidas automaticamente"
+                  ? "O botão 'Emitir NFe' fica habilitado nos pedidos"
                   : "Nenhuma nota será emitida"}
               </p>
             </div>
@@ -225,19 +216,19 @@ export default function FiscalStatus({ config, onRefresh, onEdit }: FiscalStatus
           <ul className="space-y-2 text-sm">
             <li className="flex items-start gap-2">
               <Check className="w-4 h-4 text-green-600 mt-0.5" />
-              <span>Quando ATIVO, os botões 'Emitir NFe' nos pedidos ficam habilitados</span>
+              <span>Quando ATIVO, o botão 'Emitir NFe' nos pedidos fica habilitado</span>
             </li>
             <li className="flex items-start gap-2">
               <Check className="w-4 h-4 text-green-600 mt-0.5" />
-              <span>As notas são emitidas automaticamente conforme o pedido é finalizado</span>
+              <span>No modo automático, a nota é emitida assim que o pagamento é confirmado</span>
             </li>
             <li className="flex items-start gap-2">
               <Check className="w-4 h-4 text-green-600 mt-0.5" />
-              <span>Você pode emitir individualmente ou em lote pela tela de Pedidos</span>
+              <span>No modo manual, você emite individualmente pela tela de Pedidos</span>
             </li>
             <li className="flex items-start gap-2">
               <X className="w-4 h-4 text-muted-foreground mt-0.5" />
-              <span>Quando INATIVO, nenhuma nota é emitida (botões aparecem desabilitados)</span>
+              <span>Quando INATIVO, nenhuma nota é emitida (botão aparece desabilitado)</span>
             </li>
           </ul>
         </CardContent>
@@ -245,13 +236,13 @@ export default function FiscalStatus({ config, onRefresh, onEdit }: FiscalStatus
 
       {/* Actions Section */}
       <div className="flex flex-wrap gap-3">
-        <Button onClick={handleEdit} variant="outline" className="flex-1 min-w-[200px]" disabled={loading}>
+        <Button onClick={onEdit} variant="outline" className="flex-1 min-w-[200px]" disabled={loading}>
           <FileText className="w-4 h-4 mr-2" />
           Editar Dados
         </Button>
-        <Button onClick={handleUpdateCertificate} variant="outline" className="flex-1 min-w-[200px]" disabled={loading}>
-          <RefreshCcw className="w-4 h-4 mr-2" />
-          Atualizar Certificado
+        <Button onClick={handleReconnectWebhook} variant="outline" className="flex-1 min-w-[200px]" disabled={loading}>
+          <Webhook className="w-4 h-4 mr-2" />
+          Reconectar Webhook
         </Button>
       </div>
 
@@ -261,7 +252,7 @@ export default function FiscalStatus({ config, onRefresh, onEdit }: FiscalStatus
           <AlertDialogHeader>
             <AlertDialogTitle>Desativar emissão fiscal?</AlertDialogTitle>
             <AlertDialogDescription>
-              Tem certeza? Os botões 'Emitir NFe' ficarão desabilitados e nenhuma nota será emitida automaticamente.
+              Tem certeza? O botão 'Emitir NFe' ficará desabilitado e nenhuma nota será emitida automaticamente.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

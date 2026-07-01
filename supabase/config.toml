@@ -100,3 +100,9 @@ verify_jwt = false
 [functions.invite-collaborator]
 verify_jwt = false
 
+[functions.spedy-webhook]
+verify_jwt = false
+
+[functions.spedy-poll-invoice-status]
+verify_jwt = true
+
