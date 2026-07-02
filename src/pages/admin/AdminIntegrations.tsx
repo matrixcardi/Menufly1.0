@@ -84,11 +84,10 @@ const PLATFORMS: PlatformConfig[] = [
     description: "Receba pedidos do 99food diretamente no Menufly. Gerencie tudo em um painel unificado.",
     docsUrl: "https://www.99food.com.br",
     steps: [
-      "Acesse o portal da 99food e faça login com sua conta de gerente da loja",
-      "No menu lateral, acesse \"Configurações\" → \"Integrações\"",
-      "Procure por \"Menufly\" na lista de integradores e clique em \"Autorizar\"",
-      "Após autorizar, copie o ID da Loja que aparece no portal",
-      "Cole o ID da Loja no campo abaixo e clique em Conectar",
+      "Clique em \"Gerar link de autorização\" abaixo",
+      "Abra o link e faça login com a conta da sua loja no 99food",
+      "Autorize a Menufly como integradora da loja",
+      "Volte aqui e clique em \"Verificar conexão\"",
     ],
   },
   {
@@ -148,6 +147,7 @@ interface Integration {
   platform: string;
   status: IntegrationStatus;
   merchant_id: string | null;
+  merchant_name: string | null;
   last_sync_at: string | null;
 }
 
@@ -181,6 +181,9 @@ export default function AdminIntegrations() {
   const [merchantId, setMerchantId] = useState("");
   const [apiToken, setApiToken] = useState("");
   const [saving, setSaving] = useState(false);
+  // 99food: URL de autorização self-service gerada pelo nf-connect-merchant
+  const [nfAuthUrl, setNfAuthUrl] = useState<string | null>(null);
+  const [nfVerifying, setNfVerifying] = useState(false);
   const { toast } = useToast();
 
   // Multi-restaurant linking state
@@ -225,7 +228,7 @@ export default function AdminIntegrations() {
 
       const { data: integrationsData } = await supabase
         .from("platform_integrations")
-        .select("id, platform, status, merchant_id, last_sync_at")
+        .select("id, platform, status, merchant_id, merchant_name, last_sync_at")
         .eq("restaurant_id", ctxRestaurantId);
 
       setIntegrations((integrationsData || []) as Integration[]);
@@ -262,13 +265,15 @@ export default function AdminIntegrations() {
 
   const handleConnect = async () => {
     if (!restaurantId || !selectedPlatform) return;
-    if (!merchantId.trim()) {
+    // 99food usa fluxo de autorização self-service — sem merchant_id/token manual
+    const is99food = selectedPlatform.id === "99food";
+    if (!is99food && !merchantId.trim()) {
       toast({ title: "Preencha o ID da loja", variant: "destructive" });
       return;
     }
     // iFood uses platform-level credentials — only merchant_id is required
     const isIfood = selectedPlatform.id === "ifood";
-    if (!isIfood && !apiToken.trim()) {
+    if (!isIfood && !is99food && !apiToken.trim()) {
       toast({ title: "Preencha o Token de API", variant: "destructive" });
       return;
     }
@@ -297,25 +302,21 @@ export default function AdminIntegrations() {
         return;
       }
 
-      const is99food = selectedPlatform.id === "99food";
       if (is99food) {
         const { data, error } = await supabase.functions.invoke("nf-connect-merchant", {
-          body: { restaurant_id: restaurantId, merchant_id: merchantId.trim(), api_token: apiToken.trim() },
+          body: { restaurant_id: restaurantId, action: "start" },
         });
         if (error) {
           const msg = await extractEdgeFunctionMessage(error);
-          toast({ title: "Erro ao conectar 99food", description: msg, variant: "destructive" });
+          toast({ title: "Erro ao gerar link de autorização", description: msg, variant: "destructive" });
           return;
         }
-        toast({
-          title: `99food conectado! 🎉`,
-          description: data?.merchant_name
-            ? `Loja: ${data.merchant_name}. Pedidos serão sincronizados a cada 30 segundos.`
-            : "Pedidos serão sincronizados a cada 30 segundos.",
-        });
-        setSelectedPlatform(null);
-        setMerchantId("");
-        setApiToken("");
+        if (data?.error || !data?.auth_url) {
+          toast({ title: "Erro ao gerar link de autorização", description: data?.error, variant: "destructive" });
+          return;
+        }
+        // Dialog fica aberto: o lojista abre o link, autoriza e clica em "Verificar conexão"
+        setNfAuthUrl(data.auth_url);
         fetchData();
         return;
       }
@@ -359,6 +360,43 @@ export default function AdminIntegrations() {
     }
   };
 
+  // Checa se a loja já autorizou no portal do 99food e finaliza a conexão
+  const handleVerify99food = async () => {
+    if (!restaurantId) return;
+    setNfVerifying(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("nf-connect-merchant", {
+        body: { restaurant_id: restaurantId, action: "verify" },
+      });
+      if (error) {
+        const msg = await extractEdgeFunctionMessage(error);
+        toast({ title: "Erro ao verificar conexão", description: msg, variant: "destructive" });
+        return;
+      }
+      if (data?.success) {
+        toast({
+          title: "99food conectado! 🎉",
+          description: data?.merchant_name
+            ? `Loja: ${data.merchant_name}. Os pedidos chegarão automaticamente.`
+            : "Os pedidos chegarão automaticamente.",
+        });
+        setSelectedPlatform(null);
+        setNfAuthUrl(null);
+        fetchData();
+      } else {
+        toast({
+          title: "Autorização ainda pendente",
+          description: "Abra o link de autorização, aprove o acesso no portal do 99food e verifique novamente.",
+        });
+      }
+    } catch (error) {
+      logger.error("Error verifying 99food:", error);
+      toast({ title: "Erro ao verificar conexão", description: getUserFriendlyError(error), variant: "destructive" });
+    } finally {
+      setNfVerifying(false);
+    }
+  };
+
   const handleDisconnect = async (platformId: string) => {
     const integration = getIntegration(platformId);
     if (!integration) return;
@@ -370,6 +408,15 @@ export default function AdminIntegrations() {
         });
         if (error) throw error;
         toast({ title: "iFood desconectado" });
+        fetchData();
+        return;
+      }
+      if (platformId === "99food") {
+        const { error } = await supabase.functions.invoke("nf-disconnect", {
+          body: { restaurant_id: restaurantId },
+        });
+        if (error) throw error;
+        toast({ title: "99food desconectado" });
         fetchData();
         return;
       }
@@ -705,6 +752,7 @@ export default function AdminIntegrations() {
                     const existing = getIntegration(platform.id);
                     setMerchantId(existing?.merchant_id || "");
                     setApiToken("");
+                    setNfAuthUrl(null);
                   }}
                   className={`group text-left rounded-xl border bg-card transition-all p-4 flex flex-col gap-3 ${
                     isComingSoon
@@ -895,7 +943,15 @@ export default function AdminIntegrations() {
       </Dialog>
 
       {/* Connect Dialog */}
-      <Dialog open={!!selectedPlatform} onOpenChange={(open) => !open && setSelectedPlatform(null)}>
+      <Dialog
+        open={!!selectedPlatform}
+        onOpenChange={(open) => {
+          if (!open) {
+            setSelectedPlatform(null);
+            setNfAuthUrl(null);
+          }
+        }}
+      >
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -930,16 +986,18 @@ export default function AdminIntegrations() {
 
               {/* Form */}
               <div className="space-y-3">
-                <div className="space-y-1.5">
-                  <Label htmlFor="merchantId">ID da Loja / Merchant ID</Label>
-                  <Input
-                    id="merchantId"
-                    value={merchantId}
-                    onChange={(e) => setMerchantId(e.target.value)}
-                    placeholder="Ex: 12345678"
-                  />
-                </div>
-                {selectedPlatform.id !== "ifood" && (
+                {selectedPlatform.id !== "99food" && (
+                  <div className="space-y-1.5">
+                    <Label htmlFor="merchantId">ID da Loja / Merchant ID</Label>
+                    <Input
+                      id="merchantId"
+                      value={merchantId}
+                      onChange={(e) => setMerchantId(e.target.value)}
+                      placeholder="Ex: 12345678"
+                    />
+                  </div>
+                )}
+                {selectedPlatform.id !== "ifood" && selectedPlatform.id !== "99food" && (
                   <div className="space-y-1.5">
                     <Label htmlFor="apiToken">Token de API</Label>
                     <Input
@@ -949,6 +1007,51 @@ export default function AdminIntegrations() {
                       onChange={(e) => setApiToken(e.target.value)}
                       placeholder="Cole seu token aqui"
                     />
+                  </div>
+                )}
+                {selectedPlatform.id === "99food" && (
+                  <div className="space-y-2">
+                    <div className="rounded-lg bg-blue-500/5 border border-blue-500/20 p-3 text-xs text-blue-700 dark:text-blue-300">
+                      A Menufly é integradora homologada do 99food. Não é necessário token nem ID — gere o link de autorização e aprove o acesso com a conta da sua loja.
+                    </div>
+                    {nfAuthUrl && (
+                      <div className="space-y-2">
+                        <Label className="text-sm font-medium">Link de autorização (válido por 7 dias):</Label>
+                        <div className="flex items-center gap-2">
+                          <code className="flex-1 bg-muted rounded px-3 py-2 text-xs break-all">
+                            {nfAuthUrl}
+                          </code>
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            className="h-9 w-9 shrink-0"
+                            onClick={() => {
+                              navigator.clipboard.writeText(nfAuthUrl);
+                              toast({ title: "Link copiado!" });
+                            }}
+                          >
+                            <Copy className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            className="h-9 w-9 shrink-0"
+                            onClick={() => window.open(nfAuthUrl, "_blank")}
+                          >
+                            <ExternalLink className="h-4 w-4" />
+                          </Button>
+                        </div>
+                        <Button
+                          className="w-full"
+                          variant="secondary"
+                          onClick={handleVerify99food}
+                          disabled={nfVerifying}
+                        >
+                          {nfVerifying ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <CheckCircle2 className="w-4 h-4 mr-2" />}
+                          {nfVerifying ? "Verificando..." : "Verificar conexão"}
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 )}
                 {selectedPlatform.id === "ifood" && (
@@ -1005,7 +1108,11 @@ export default function AdminIntegrations() {
               </Button>
               <Button onClick={handleConnect} disabled={saving}>
                 {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Plug className="w-4 h-4 mr-2" />}
-                {saving ? "Conectando..." : "Conectar"}
+                {saving
+                  ? "Conectando..."
+                  : selectedPlatform?.id === "99food"
+                    ? nfAuthUrl ? "Gerar novo link" : "Gerar link de autorização"
+                    : "Conectar"}
               </Button>
             </div>
           </DialogFooter>

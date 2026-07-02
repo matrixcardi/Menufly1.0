@@ -88,10 +88,7 @@ verify_jwt = false
 [functions.ifood-poll-orders]
 verify_jwt = false
 
-[functions.nf-connect-merchant]
-verify_jwt = false
-
-[functions.nf-poll-orders]
+[functions.nf-webhook]
 verify_jwt = false
 
 [functions.platform-webhook]

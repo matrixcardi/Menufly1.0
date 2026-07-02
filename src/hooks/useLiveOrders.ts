@@ -322,6 +322,28 @@ export function useLiveOrders(cashRegisterOpen: boolean) {
     };
   }, [selectedRestaurantIds.join(","), notificationSound, toast, restaurants]);
 
+  // Push-back de status para o 99Food. O update local já foi feito (otimista) —
+  // aqui só sincronizamos a plataforma, mesmo contrato de lavem-dispatch/refund.
+  const invoke99FoodAction = (order: Order, action: "ready" | "delivered" | "cancel", reason?: string) => {
+    const notifyFailure = () =>
+      toast({
+        title: "⚠️ Falha ao sincronizar com o 99Food",
+        description: "Atualize o pedido também no app do 99Food.",
+        variant: "destructive",
+      });
+    supabase.functions.invoke("nf-order-action", {
+      body: { restaurant_id: order.restaurant_id, order_id: order.id, action, reason },
+    }).then(({ data, error }) => {
+      if (error || data?.error) {
+        console.error("nf-order-action error:", error || data?.error);
+        notifyFailure();
+      }
+    }).catch((err) => {
+      console.error("nf-order-action error:", err);
+      notifyFailure();
+    });
+  };
+
   const changeStatus = async (orderId: string, newStatus: string, driverId?: string, driverName?: string) => {
     // Block accepting orders if cash register is not open
     const order = orders.find(o => o.id === orderId);
@@ -354,8 +376,18 @@ export function useLiveOrders(cashRegisterOpen: boolean) {
     const orderRestaurantId = order?.restaurant_id ?? selectedOrder?.restaurant_id ?? null;
 
     if (orderRestaurantId && !error) {
-      // Auto-refund when rejecting a paid online order
-      if (newStatus === "rejected" && order && order.payment_status === "paid" && ["pix", "card"].includes(order.payment_method)) {
+      // Sincroniza com o 99Food (pending→preparing dispensa: já auto-confirmado no webhook)
+      if (order?.source === "99food") {
+        if (newStatus === "ready" || newStatus === "pickup_ready") invoke99FoodAction(order, "ready");
+        else if (newStatus === "delivered") invoke99FoodAction(order, "delivered");
+        else if (newStatus === "rejected") invoke99FoodAction(order, "cancel", "Pedido recusado pelo restaurante");
+      }
+
+      // Auto-refund when rejecting a paid online order.
+      // Pedidos de plataformas externas (ifood/99food) são pagos na plataforma —
+      // estornar via Mercado Pago aqui seria um estorno indevido.
+      const isMenuflyOrder = !order?.source || order?.source === "menufly";
+      if (newStatus === "rejected" && order && isMenuflyOrder && order.payment_status === "paid" && ["pix", "card"].includes(order.payment_method)) {
         supabase.functions.invoke("refund-payment", {
           body: { order_id: orderId, restaurant_id: orderRestaurantId },
         }).then(({ data, error: fnError }) => {
@@ -384,8 +416,11 @@ export function useLiveOrders(cashRegisterOpen: boolean) {
         },
       }).catch(err => console.log("Bot notification error (non-critical):", err));
 
-      // Lá Vem Entregas — auto-dispatch when order becomes "ready" and integration is in auto mode
-      if (newStatus === "ready" && order?.delivery_type === "delivery" && !(order as any).lavem_delivery_id && !driverId) {
+      // Lá Vem Entregas — auto-dispatch when order becomes "ready" and integration is in auto mode.
+      // Pedidos 99food com entrega da própria 99 (delivery_type 1) já têm entregador da plataforma.
+      const has99FoodDelivery = order?.source === "99food" &&
+        Number((order?.external_data as { delivery_type?: number } | null)?.delivery_type) === 1;
+      if (newStatus === "ready" && order?.delivery_type === "delivery" && !has99FoodDelivery && !(order as any).lavem_delivery_id && !driverId) {
         const { data: integ } = await supabase
           .from("lavem_integrations")
           .select("is_active, dispatch_mode")
@@ -420,8 +455,16 @@ export function useLiveOrders(cashRegisterOpen: boolean) {
     const orderRestaurantId = order?.restaurant_id ?? selectedOrder?.restaurant_id ?? null;
 
     if (orderRestaurantId) {
-      // Auto-refund when cancelling a paid online order
-      if (order && order.payment_status === "paid" && ["pix", "card"].includes(order.payment_method)) {
+      // Sincroniza o cancelamento com o 99Food
+      if (order?.source === "99food") {
+        invoke99FoodAction(order, "cancel", reason || "Cancelado pelo restaurante");
+      }
+
+      // Auto-refund when cancelling a paid online order.
+      // Pedidos de plataformas externas (ifood/99food) são pagos na plataforma —
+      // estornar via Mercado Pago aqui seria um estorno indevido.
+      const isMenuflyOrder = !order?.source || order?.source === "menufly";
+      if (order && isMenuflyOrder && order.payment_status === "paid" && ["pix", "card"].includes(order.payment_method)) {
         supabase.functions.invoke("refund-payment", {
           body: { order_id: orderId, restaurant_id: orderRestaurantId },
         }).then(({ data, error: fnError }) => {

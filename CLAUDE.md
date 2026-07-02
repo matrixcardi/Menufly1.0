@@ -236,7 +236,8 @@ Roles disponíveis: `owner`, `manager`, `cashier`, `kitchen`, `delivery`. Verifi
 |---|---|---|
 | iFood | `ifood-poll-orders`, `ifood-connect-merchant` | Importar pedidos |
 | WhatsApp Business | `whatsapp-bot`, `whatsapp-instance` | Bot e marketing |
-| NFe/NF-e | `nf-connect-merchant`, `nf-poll-orders` | Nota fiscal eletrônica |
+| 99Food | `nf-webhook`, `nf-connect-merchant`, `nf-order-action`, `nf-disconnect` | Importar pedidos (webhooks) — ver `docs/integracao-99food.md` |
+| NFe/NFC-e (Spedy) | `spedy-issue-invoice`, `spedy-webhook`, `spedy-*` | Nota fiscal eletrônica |
 | Meta Pixel | `meta-conversions`, `src/lib/meta-pixel.ts` | Tracking de conversão |
 | OpenAI | `ai-generate-content` | Geração de descrições e imagens |
 | Push notifications | `send-push`, `src/lib/push-notifications.ts` | Notificações mobile |
