@@ -1,7 +1,6 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -12,14 +11,6 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-} from "@/components/ui/dialog";
-import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -29,20 +20,20 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { 
-  Send, 
-  Users, 
-  Clock, 
-  AlertTriangle, 
-  Play, 
-  Pause, 
-  Square,
-  CheckCircle2,
+import {
+  Send,
+  Users,
+  Clock,
+  AlertTriangle,
   MessageCircle,
   X,
   CalendarIcon,
-  Timer
+  Ticket,
+  Loader2,
 } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { useRestaurantContext } from "@/contexts/RestaurantContext";
+import { useWhatsappCredits } from "@/hooks/useWhatsappCredits";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -77,8 +68,6 @@ interface BulkWhatsappSenderProps {
 }
 
 const DAILY_LIMIT = 50;
-const INTERVAL_MINUTES = 5;
-const STORAGE_KEY_PREFIX = "whatsapp_sent_";
 
 // Templates de mensagem por filtro
 const getFilterMessageTemplate = (filter: FilterOption, restaurantName: string): string => {
@@ -160,7 +149,7 @@ Te esperamos!`;
 
 Faz tempo que não nos falamos...
 
-O ${restName} sente muito a sua falta! 
+O ${restName} sente muito a sua falta!
 
 Queremos reconquistar você! Por isso, preparamos uma oferta imperdível exclusiva para o seu retorno! 🔥
 
@@ -171,7 +160,7 @@ Esperamos ansiosamente seu retorno! 😊`;
     default:
       return `Olá {nome}! 👋
 
-Temos novidades no ${restName} esperando por você! 
+Temos novidades no ${restName} esperando por você!
 
 Venha conferir nosso cardápio e faça seu pedido! 🍔
 
@@ -201,116 +190,31 @@ export default function BulkWhatsappSender({
   onClearSelection,
 }: BulkWhatsappSenderProps) {
   const { toast } = useToast();
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const { selectedRestaurant } = useRestaurantContext();
+  const { credits, refetch: refetchCredits } = useWhatsappCredits(restaurantId);
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
   const [warningDialogOpen, setWarningDialogOpen] = useState(false);
   const [riskAcknowledged, setRiskAcknowledged] = useState(false);
-  const [isRunning, setIsRunning] = useState(false);
-  const [isPaused, setIsPaused] = useState(false);
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [sentToday, setSentToday] = useState(0);
   const [queue, setQueue] = useState<Customer[]>([]);
-  const [sentCustomers, setSentCustomers] = useState<Set<string>>(new Set());
-  const [nextSendTime, setNextSendTime] = useState<Date | null>(null);
-  const [countdown, setCountdown] = useState(0);
   const [customMessage, setCustomMessage] = useState("");
-  
+  const [saving, setSaving] = useState(false);
+
   // Scheduling state
   const [isScheduled, setIsScheduled] = useState(false);
   const [scheduledDate, setScheduledDate] = useState<Date | undefined>(undefined);
   const [scheduledTime, setScheduledTime] = useState("18:00");
 
-  // Get today's date key for localStorage
-  const getTodayKey = () => {
-    const today = new Date().toISOString().split("T")[0];
-    return `${STORAGE_KEY_PREFIX}${restaurantId}_${today}`;
-  };
-
-  // Load sent count from localStorage
-  useEffect(() => {
-    const key = getTodayKey();
-    const stored = localStorage.getItem(key);
-    if (stored) {
-      const data = JSON.parse(stored);
-      setSentToday(data.count || 0);
-    }
-  }, [restaurantId]);
+  const menuLink = useMemo(() => {
+    return selectedRestaurant?.slug
+      ? `${window.location.origin}/${selectedRestaurant.slug}`
+      : "";
+  }, [selectedRestaurant?.slug]);
 
   // Update message template when filter changes
   useEffect(() => {
-    setCustomMessage(getFilterMessageTemplate(currentFilter, restaurantName));
-  }, [currentFilter, restaurantName]);
-
-  // Save sent count to localStorage
-  const updateSentCount = (count: number) => {
-    const key = getTodayKey();
-    localStorage.setItem(key, JSON.stringify({ count, updatedAt: new Date().toISOString() }));
-    setSentToday(count);
-  };
-
-  // Countdown timer
-  useEffect(() => {
-    if (!isRunning || isPaused || !nextSendTime) return;
-
-    const interval = setInterval(() => {
-      const now = new Date();
-      const diff = Math.max(0, Math.floor((nextSendTime.getTime() - now.getTime()) / 1000));
-      setCountdown(diff);
-
-      if (diff === 0 && currentIndex < queue.length) {
-        sendNextMessage();
-      }
-    }, 1000);
-
-    return () => clearInterval(interval);
-  }, [isRunning, isPaused, nextSendTime, currentIndex, queue.length]);
-
-  const formatPhoneForWhatsapp = (phone: string): string => {
-    const numbers = phone.replace(/\D/g, "");
-    if (numbers.length === 11 || numbers.length === 10) {
-      return `55${numbers}`;
-    }
-    return numbers;
-  };
-
-  const getPersonalizedMessage = (customer: Customer): string => {
-    const firstName = customer.name.split(" ")[0];
-    return customMessage.replace(/\{nome\}/gi, firstName);
-  };
-
-  const sendNextMessage = useCallback(() => {
-    if (currentIndex >= queue.length || sentToday >= DAILY_LIMIT) {
-      setIsRunning(false);
-      toast({
-        title: "Disparo finalizado!",
-        description: `${sentCustomers.size} mensagens enviadas com sucesso.`,
-      });
-      return;
-    }
-
-    const customer = queue[currentIndex];
-    const message = getPersonalizedMessage(customer);
-    const phone = formatPhoneForWhatsapp(customer.phone);
-    const encodedMessage = encodeURIComponent(message);
-    const whatsappUrl = `https://wa.me/${phone}?text=${encodedMessage}`;
-
-    // Open WhatsApp
-    window.open(whatsappUrl, "_blank");
-
-    // Update state
-    setSentCustomers((prev) => new Set(prev).add(customer.id));
-    updateSentCount(sentToday + 1);
-    setCurrentIndex((prev) => prev + 1);
-
-    // Schedule next message
-    if (currentIndex + 1 < queue.length && sentToday + 1 < DAILY_LIMIT) {
-      const nextTime = new Date(Date.now() + INTERVAL_MINUTES * 60 * 1000);
-      setNextSendTime(nextTime);
-      setCountdown(INTERVAL_MINUTES * 60);
-    } else {
-      setIsRunning(false);
-    }
-  }, [currentIndex, queue, sentToday, customMessage]);
+    const template = getFilterMessageTemplate(currentFilter, restaurantName);
+    setCustomMessage(menuLink ? template.replace(/\[Link de pedido\]/g, menuLink) : template);
+  }, [currentFilter, restaurantName, menuLink]);
 
   const startBulkSend = () => {
     if (selectedCustomers.length === 0) {
@@ -322,118 +226,93 @@ export default function BulkWhatsappSender({
       return;
     }
 
-    const remaining = DAILY_LIMIT - sentToday;
-    if (remaining <= 0) {
+    if (!selectedRestaurant?.whatsapp_connected) {
       toast({
-        title: "Limite diário atingido",
-        description: `Você já enviou ${DAILY_LIMIT} mensagens hoje. Tente novamente amanhã.`,
+        title: "WhatsApp não conectado",
+        description: "Conecte seu WhatsApp na página de Campanhas antes de disparar mensagens automáticas.",
         variant: "destructive",
       });
       return;
     }
 
-    const toSend = selectedCustomers.slice(0, remaining);
-    setQueue(toSend);
+    if (credits.balance <= 0) {
+      toast({
+        title: "Sem créditos de WhatsApp",
+        description: "Adquira créditos na página de Campanhas para enviar mensagens automáticas.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setQueue(selectedCustomers);
     setRiskAcknowledged(false);
     setWarningDialogOpen(true);
   };
 
-  const confirmAndStart = () => {
-    setConfirmDialogOpen(false);
+  const confirmAndStart = async () => {
+    if (saving) return;
 
+    let scheduledDateTime = new Date();
     if (isScheduled && scheduledDate) {
-      // Store scheduled dispatch
       const [hours, minutes] = scheduledTime.split(":").map(Number);
-      const scheduledDateTime = new Date(scheduledDate);
+      scheduledDateTime = new Date(scheduledDate);
       scheduledDateTime.setHours(hours, minutes, 0, 0);
+    }
 
-      // Save to localStorage for now (in a real app, this would go to a database)
-      const scheduleKey = `scheduled_dispatch_${restaurantId}_${Date.now()}`;
-      localStorage.setItem(scheduleKey, JSON.stringify({
-        customers: queue.map(c => c.id),
-        message: customMessage,
-        scheduledAt: scheduledDateTime.toISOString(),
-        filter: currentFilter,
+    setSaving(true);
+    try {
+      const { data: campaign, error: campaignError } = await supabase
+        .from("campaigns")
+        .insert({
+          restaurant_id: restaurantId,
+          name: `Disparo CRM — ${getFilterLabel(currentFilter)} — ${format(scheduledDateTime, "dd/MM HH:mm", { locale: ptBR })}`,
+          filter_type: currentFilter,
+          message_template: customMessage,
+          image_url: null,
+          scheduled_at: scheduledDateTime.toISOString(),
+          status: "scheduled",
+          total_recipients: queue.length,
+          dispatch_days: [0, 1, 2, 3, 4, 5, 6],
+        })
+        .select()
+        .single();
+
+      if (campaignError) throw campaignError;
+
+      const recipients = queue.map((c) => ({
+        campaign_id: campaign.id,
+        customer_name: c.name,
+        customer_phone: c.phone,
+        status: "pending",
       }));
 
+      const { error: recipientsError } = await supabase
+        .from("campaign_recipients")
+        .insert(recipients);
+
+      if (recipientsError) throw recipientsError;
+
+      setConfirmDialogOpen(false);
       toast({
-        title: "Disparo agendado!",
-        description: `${queue.length} mensagens serão enviadas em ${format(scheduledDateTime, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}`,
+        title: isScheduled ? "Disparo agendado! 🎉" : "Disparo iniciado! 🎉",
+        description: isScheduled
+          ? `${queue.length} mensagens serão enviadas automaticamente a partir de ${format(scheduledDateTime, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}. Acompanhe na página de Campanhas.`
+          : `${queue.length} mensagens serão enviadas automaticamente pelo seu WhatsApp conectado. Acompanhe o progresso na página de Campanhas.`,
       });
 
+      refetchCredits();
       onClearSelection();
-      return;
+    } catch (error) {
+      console.error("Error creating CRM dispatch:", error);
+      toast({
+        title: "Erro ao criar disparo",
+        description: "Tente novamente em instantes.",
+        variant: "destructive",
+      });
+    } finally {
+      setSaving(false);
     }
-
-    // Immediate dispatch
-    setIsDialogOpen(true);
-    setCurrentIndex(0);
-    setSentCustomers(new Set());
-    setIsRunning(true);
-    setIsPaused(false);
-
-    // Send first message immediately
-    setTimeout(() => {
-      const customer = queue[0];
-      const message = getPersonalizedMessage(customer);
-      const phone = formatPhoneForWhatsapp(customer.phone);
-      const encodedMessage = encodeURIComponent(message);
-      const whatsappUrl = `https://wa.me/${phone}?text=${encodedMessage}`;
-
-      window.open(whatsappUrl, "_blank");
-      setSentCustomers(new Set([customer.id]));
-      updateSentCount(sentToday + 1);
-      setCurrentIndex(1);
-
-      if (queue.length > 1 && sentToday + 1 < DAILY_LIMIT) {
-        const nextTime = new Date(Date.now() + INTERVAL_MINUTES * 60 * 1000);
-        setNextSendTime(nextTime);
-        setCountdown(INTERVAL_MINUTES * 60);
-      } else {
-        setIsRunning(false);
-      }
-    }, 500);
   };
-
-  const pauseQueue = () => {
-    setIsPaused(true);
-  };
-
-  const resumeQueue = () => {
-    setIsPaused(false);
-    const nextTime = new Date(Date.now() + countdown * 1000);
-    setNextSendTime(nextTime);
-  };
-
-  const stopQueue = () => {
-    setIsRunning(false);
-    setIsPaused(false);
-    setQueue([]);
-    setCurrentIndex(0);
-    setNextSendTime(null);
-    setCountdown(0);
-    toast({
-      title: "Disparo cancelado",
-      description: `${sentCustomers.size} mensagens foram enviadas antes do cancelamento.`,
-    });
-  };
-
-  const closeDialog = () => {
-    if (isRunning) {
-      stopQueue();
-    }
-    setIsDialogOpen(false);
-    onClearSelection();
-  };
-
-  const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
-  };
-
-  const progress = queue.length > 0 ? (currentIndex / queue.length) * 100 : 0;
-  const remaining = DAILY_LIMIT - sentToday;
 
   if (selectedCustomers.length === 0) return null;
 
@@ -445,12 +324,12 @@ export default function BulkWhatsappSender({
           <Users className="h-5 w-5 text-primary" />
           <span className="font-medium">{selectedCustomers.length} selecionado{selectedCustomers.length !== 1 ? "s" : ""}</span>
         </div>
-        
+
         <div className="h-8 w-px bg-border" />
-        
+
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Clock className="h-4 w-4" />
-          <span>Restam {remaining} hoje</span>
+          <Ticket className="h-4 w-4" />
+          <span>{credits.balance} crédito{credits.balance !== 1 ? "s" : ""}</span>
         </div>
 
         <div className="h-8 w-px bg-border" />
@@ -467,7 +346,6 @@ export default function BulkWhatsappSender({
         <Button
           className="bg-green-600 hover:bg-green-700 gap-2"
           onClick={startBulkSend}
-          disabled={remaining <= 0}
         >
           <Send className="h-4 w-4" />
           Disparar WhatsApp
@@ -492,7 +370,7 @@ export default function BulkWhatsappSender({
                     📵 <strong>Denúncias de clientes:</strong> Se os destinatários marcarem sua mensagem como spam, o algoritmo do WhatsApp pode bloquear seu número automaticamente. Quanto mais denúncias, maior o risco.
                   </p>
                   <p className="text-sm text-yellow-800 dark:text-yellow-200">
-                    ⏱️ <strong>O intervalo não é garantia:</strong> O intervalo de 5 minutos entre mensagens reduz o risco, mas não elimina completamente a chance de detecção. O WhatsApp analisa padrões de comportamento ao longo do tempo.
+                    ⏱️ <strong>A cadência não é garantia:</strong> A plataforma envia as mensagens com intervalo entre elas e respeitando o limite diário, o que reduz o risco, mas não elimina completamente a chance de detecção. O WhatsApp analisa padrões de comportamento ao longo do tempo.
                   </p>
                   <p className="text-sm text-yellow-800 dark:text-yellow-200">
                     📋 <strong>Boas práticas obrigatórias:</strong> Envie apenas para clientes que realmente conhecem seu estabelecimento. Evite disparos repetidos para a mesma base em curtos períodos. Mensagens irrelevantes aumentam drasticamente o risco de denúncias.
@@ -549,21 +427,27 @@ export default function BulkWhatsappSender({
                 <p>
                   Você está prestes a enviar mensagens para <strong>{queue.length} cliente{queue.length !== 1 ? "s" : ""}</strong> do segmento <Badge variant="outline">{getFilterLabel(currentFilter)}</Badge>
                 </p>
-                
+
                 <div className="bg-muted p-3 rounded-lg space-y-2 text-sm">
                   <div className="flex items-center gap-2">
-                    <Clock className="h-4 w-4" />
-                    <span>Intervalo de <strong>{INTERVAL_MINUTES} minutos</strong> entre cada mensagem</span>
-                  </div>
-                  <div className="flex items-center gap-2">
                     <MessageCircle className="h-4 w-4" />
-                    <span>Limite diário: <strong>{remaining} mensagens restantes</strong></span>
+                    <span>Envio <strong>automático</strong> pelo seu WhatsApp conectado — não precisa manter a aba aberta</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <Timer className="h-4 w-4" />
-                    <span>Tempo estimado: <strong>~{Math.ceil((queue.length - 1) * INTERVAL_MINUTES)} minutos</strong></span>
+                    <Clock className="h-4 w-4" />
+                    <span>Cadência segura controlada pela plataforma: janela das <strong>9h às 21h</strong>, até <strong>{DAILY_LIMIT} mensagens por dia</strong></span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Ticket className="h-4 w-4" />
+                    <span>Cada mensagem consome 1 crédito — saldo atual: <strong>{credits.balance}</strong></span>
                   </div>
                 </div>
+
+                {credits.balance < queue.length && (
+                  <div className="bg-yellow-50 dark:bg-yellow-950 border border-yellow-200 dark:border-yellow-800 p-3 rounded-lg text-sm text-yellow-800 dark:text-yellow-200">
+                    <strong>⚠️ Créditos insuficientes:</strong> você tem {credits.balance} crédito{credits.balance !== 1 ? "s" : ""} para {queue.length} mensagens. O disparo será pausado quando os créditos acabarem e retomado após a recarga.
+                  </div>
+                )}
 
                 {/* Message Template */}
                 <div className="space-y-2">
@@ -642,131 +526,32 @@ export default function BulkWhatsappSender({
                   )}
                 </div>
 
-                {!isScheduled && (
-                  <div className="bg-yellow-50 dark:bg-yellow-950 border border-yellow-200 dark:border-yellow-800 p-3 rounded-lg text-sm text-yellow-800 dark:text-yellow-200">
-                    <strong>⚠️ Importante:</strong> Mantenha esta aba aberta durante o disparo. 
-                    A cada {INTERVAL_MINUTES} minutos uma nova aba do WhatsApp será aberta automaticamente.
-                  </div>
-                )}
+                <div className="bg-muted p-3 rounded-lg text-sm text-muted-foreground">
+                  📊 Após confirmar, acompanhe o progresso do disparo na página <strong>Campanhas</strong> do painel.
+                </div>
               </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogCancel disabled={saving}>Cancelar</AlertDialogCancel>
             <AlertDialogAction
-              onClick={confirmAndStart}
+              onClick={(e) => {
+                e.preventDefault();
+                confirmAndStart();
+              }}
               className="bg-green-600 hover:bg-green-700"
-              disabled={isScheduled && !scheduledDate}
+              disabled={saving || (isScheduled && !scheduledDate)}
             >
-              {isScheduled ? "Agendar Disparo" : "Iniciar Disparo"}
+              {saving ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Criando disparo...
+                </>
+              ) : isScheduled ? "Agendar Disparo" : "Iniciar Disparo"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-
-      {/* Progress Dialog */}
-      <Dialog open={isDialogOpen} onOpenChange={closeDialog}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <MessageCircle className="h-5 w-5 text-green-600" />
-              Disparo em Andamento
-            </DialogTitle>
-            <DialogDescription>
-              Enviando mensagens com cadência segura
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-6 py-4">
-            {/* Progress */}
-            <div className="space-y-2">
-              <div className="flex justify-between text-sm">
-                <span>Progresso</span>
-                <span className="font-medium">{currentIndex} de {queue.length}</span>
-              </div>
-              <Progress value={progress} className="h-3" />
-            </div>
-
-            {/* Status */}
-            <div className="grid grid-cols-2 gap-4">
-              <div className="bg-green-50 dark:bg-green-950 p-3 rounded-lg text-center">
-                <CheckCircle2 className="h-6 w-6 mx-auto text-green-600 mb-1" />
-                <div className="text-2xl font-bold text-green-600">{sentCustomers.size}</div>
-                <div className="text-xs text-muted-foreground">Enviadas</div>
-              </div>
-              
-              <div className="bg-blue-50 dark:bg-blue-950 p-3 rounded-lg text-center">
-                <Clock className="h-6 w-6 mx-auto text-blue-600 mb-1" />
-                <div className="text-2xl font-bold text-blue-600">{queue.length - currentIndex}</div>
-                <div className="text-xs text-muted-foreground">Restantes</div>
-              </div>
-            </div>
-
-            {/* Countdown */}
-            {isRunning && currentIndex < queue.length && (
-              <div className="bg-muted p-4 rounded-lg text-center">
-                <p className="text-sm text-muted-foreground mb-1">
-                  {isPaused ? "Pausado" : "Próxima mensagem em"}
-                </p>
-                <div className="text-3xl font-mono font-bold">
-                  {formatTime(countdown)}
-                </div>
-                {!isPaused && currentIndex < queue.length && (
-                  <p className="text-xs text-muted-foreground mt-2">
-                    Próximo: {queue[currentIndex]?.name}
-                  </p>
-                )}
-              </div>
-            )}
-
-            {/* Completion message */}
-            {!isRunning && currentIndex > 0 && (
-              <div className="bg-green-50 dark:bg-green-950 p-4 rounded-lg text-center">
-                <CheckCircle2 className="h-10 w-10 mx-auto text-green-600 mb-2" />
-                <p className="font-medium text-green-800 dark:text-green-200">
-                  Disparo finalizado!
-                </p>
-                <p className="text-sm text-muted-foreground">
-                  {sentCustomers.size} mensagens enviadas com sucesso
-                </p>
-              </div>
-            )}
-
-            {/* Daily limit warning */}
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <AlertTriangle className="h-4 w-4" />
-              <span>Limite diário: {sentToday}/{DAILY_LIMIT} mensagens</span>
-            </div>
-          </div>
-
-          <DialogFooter className="gap-2 sm:gap-0">
-            {isRunning && (
-              <>
-                {isPaused ? (
-                  <Button onClick={resumeQueue} className="gap-2">
-                    <Play className="h-4 w-4" />
-                    Retomar
-                  </Button>
-                ) : (
-                  <Button onClick={pauseQueue} variant="outline" className="gap-2">
-                    <Pause className="h-4 w-4" />
-                    Pausar
-                  </Button>
-                )}
-                <Button onClick={stopQueue} variant="destructive" className="gap-2">
-                  <Square className="h-4 w-4" />
-                  Parar
-                </Button>
-              </>
-            )}
-            {!isRunning && (
-              <Button onClick={closeDialog}>
-                Fechar
-              </Button>
-            )}
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </>
   );
 }
