@@ -124,6 +124,28 @@ export function CardPaymentDrawer({
     }).catch(() => {});
   }, [mpInstance, cardNumber]);
 
+  // Fallback quando o getPaymentMethods({bin}) do MP não retorna a bandeira
+  // (acontece com alguns BINs, ex. cartões multi-função do Banco Inter).
+  const BRAND_TO_METHOD_ID: Record<string, string> = {
+    mastercard: "master",
+    master: "master",
+    visa: "visa",
+    amex: "amex",
+    "american-express": "amex",
+    elo: "elo",
+    hipercard: "hipercard",
+    diners: "diners",
+  };
+
+  const detectMethodIdFromNumber = (num: string): string => {
+    if (/^4/.test(num)) return "visa";
+    if (/^(5[1-5]|2(2[2-9]|[3-6]\d|7[01]|720))/.test(num)) return "master";
+    if (/^3[47]/.test(num)) return "amex";
+    if (/^(606282|3841)/.test(num)) return "hipercard";
+    if (/^(4011|4312|4389|4514|4576|5041|5066|5090|6277|6362|6363|650|6516|6550)/.test(num)) return "elo";
+    return "";
+  };
+
   const formatCardNumber = (value: string) => {
     const digits = value.replace(/\D/g, "").substring(0, 16);
     return digits.replace(/(\d{4})(?=\d)/g, "$1 ");
@@ -265,6 +287,27 @@ export function CardPaymentDrawer({
         throw new Error("Erro ao tokenizar cartão");
       }
 
+      // Resolve a bandeira: estado do BIN lookup → retry → bin_attributes do token → prefixo do número
+      let methodId = paymentMethodId;
+      let resolvedIssuerId = issuerId || null;
+      if (!methodId) {
+        try {
+          const bin = cleanCardNumber.substring(0, 6);
+          const retry = await mpInstance.getPaymentMethods({ bin });
+          if (retry.results?.length > 0) {
+            methodId = retry.results[0].id;
+            if (retry.results[0].issuer?.id) resolvedIssuerId = String(retry.results[0].issuer.id);
+          }
+        } catch { /* segue para os fallbacks */ }
+      }
+      if (!methodId) {
+        const brandCode = tokenResult.bin_attributes?.brand?.code;
+        methodId = (brandCode && BRAND_TO_METHOD_ID[brandCode]) || detectMethodIdFromNumber(cleanCardNumber);
+      }
+      if (!methodId) {
+        throw new Error("Não foi possível identificar a bandeira do cartão. Verifique o número digitado.");
+      }
+
       // Divide o nome do titular em first/last name para enriquecer o payer no MP.
       const nameParts = cardholderName.trim().split(/\s+/);
       const payerFirstName = nameParts[0] || null;
@@ -279,8 +322,8 @@ export function CardPaymentDrawer({
           installments: parseInt(installments),
           payer_email: email,
           payer_doc_number: docNumber.replace(/\D/g, ""),
-          payment_method_id: paymentMethodId,
-          issuer_id: issuerId || null,
+          payment_method_id: methodId,
+          issuer_id: resolvedIssuerId,
           device_id: (window as any).MP_DEVICE_SESSION_ID || null,
           payer_first_name: payerFirstName,
           payer_last_name: payerLastName,
