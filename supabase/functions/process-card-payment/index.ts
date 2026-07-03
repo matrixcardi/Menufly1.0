@@ -177,15 +177,18 @@ async function createCardPayment(
 
     let result = await createCardPaymentRequest(accessToken, orderId, withFeeBody, extras.deviceId);
 
-    // If application_fee not supported, retry without it
+    // If application_fee not supported, retry without it. Em "mandatory" o retry sem
+    // fee vale para qualquer erro: o MP já devolveu 500 internal_error na combinação
+    // mandatory + application_fee, e sem a fee o desafio do banco ainda acontece.
     if (result.error) {
       const lowerBody = result.body.toLowerCase();
       const shouldRetryWithoutFee =
-        result.status === 400 &&
-        (lowerBody.includes("application_fee") || lowerBody.includes("code\":2059"));
+        threeDsMode === "mandatory" ||
+        (result.status === 400 &&
+          (lowerBody.includes("application_fee") || lowerBody.includes("code\":2059")));
 
       if (shouldRetryWithoutFee) {
-        logStep("application_fee not supported, retrying without fee");
+        logStep("Retrying without application_fee", { status: result.status, threeDsMode });
         result = await createCardPaymentRequest(accessToken, orderId, body, extras.deviceId);
       }
     }
