@@ -55,6 +55,9 @@ verify_jwt = false
 [functions.check-pix-status]
 verify_jwt = false
 
+[functions.check-card-status]
+verify_jwt = false
+
 [functions.process-email-queue]
 verify_jwt = true
 

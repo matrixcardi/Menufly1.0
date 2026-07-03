@@ -46,8 +46,13 @@ async function refreshMPToken(supabaseClient: any, restaurantId: string, refresh
   return data.access_token;
 }
 
+interface ThreeDSInfo {
+  external_resource_url: string;
+  creq: string;
+}
+
 type CardResult =
-  | { error: false; payment_id: string; status: string; status_detail: string }
+  | { error: false; payment_id: string; status: string; status_detail: string; three_ds_info: ThreeDSInfo | null }
   | { error: true; status: number; body: string };
 
 async function createCardPaymentRequest(
@@ -81,11 +86,15 @@ async function createCardPaymentRequest(
   const data = await response.json();
   logStep("Card payment created", { id: data.id, status: data.status, status_detail: data.status_detail });
 
+  const threeDS = data.three_ds_info;
   return {
     error: false,
     payment_id: String(data.id),
     status: data.status,
     status_detail: data.status_detail,
+    three_ds_info: threeDS?.external_resource_url && threeDS?.creq
+      ? { external_resource_url: threeDS.external_resource_url, creq: threeDS.creq }
+      : null,
   };
 }
 
@@ -141,6 +150,9 @@ async function createCardPayment(
     payer,
     external_reference: orderId,
     statement_descriptor: extras.restaurantName?.slice(0, 22) || undefined,
+    // 3DS 2.0: o MP decide quando exigir o desafio do banco. Converte parte das
+    // recusas cc_rejected_high_risk em autenticação + aprovação.
+    three_d_secure_mode: "optional",
   };
 
   if (Object.keys(additionalInfo).length > 0) {
@@ -312,7 +324,34 @@ serve(async (req) => {
     paymentCreated = true;
 
     // Update order based on payment status
-    const paymentResult = result as { payment_id: string; status: string; status_detail: string };
+    const paymentResult = result as { payment_id: string; status: string; status_detail: string; three_ds_info: ThreeDSInfo | null };
+
+    // Desafio 3DS: o pagamento fica pendente até o cliente autenticar no banco.
+    // O pedido permanece awaiting_payment e o frontend renderiza o desafio e faz
+    // polling via check-card-status.
+    if (paymentResult.status === "pending" && paymentResult.status_detail === "pending_challenge" && paymentResult.three_ds_info) {
+      await supabaseClient
+        .from("orders")
+        .update({
+          payment_status: "awaiting_payment",
+          payment_method: "card",
+          status: "pending",
+        })
+        .eq("id", orderId);
+
+      logStep("3DS challenge required", { payment_id: paymentResult.payment_id });
+
+      return new Response(JSON.stringify({
+        success: true,
+        payment_id: paymentResult.payment_id,
+        status: "pending_challenge",
+        status_detail: paymentResult.status_detail,
+        three_ds: paymentResult.three_ds_info,
+      }), {
+        headers: { ...publicCorsHeaders, "Content-Type": "application/json" },
+        status: 200,
+      });
+    }
 
     let orderPaymentStatus = "awaiting_payment";
     let orderStatus = "pending";

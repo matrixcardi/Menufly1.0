@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, CreditCard, Loader2, CheckCircle, XCircle, AlertTriangle } from "lucide-react";
 import {
@@ -29,7 +29,13 @@ interface CardPaymentDrawerProps {
   mpPublicKey: string;
 }
 
-type CardStatus = "form" | "processing" | "approved" | "rejected" | "in_process";
+type CardStatus = "form" | "processing" | "approved" | "rejected" | "in_process" | "challenge";
+
+interface ThreeDSChallenge {
+  external_resource_url: string;
+  creq: string;
+  payment_id: string;
+}
 
 export function CardPaymentDrawer({
   open,
@@ -61,6 +67,10 @@ export function CardPaymentDrawer({
   const [installments, setInstallments] = useState("1");
   const [paymentMethodId, setPaymentMethodId] = useState("");
   const [issuerId, setIssuerId] = useState("");
+
+  // Desafio 3D Secure (autenticação no banco emissor)
+  const [challenge, setChallenge] = useState<ThreeDSChallenge | null>(null);
+  const challengeFormRef = useRef<HTMLFormElement | null>(null);
 
   // Load MercadoPago SDK
   useEffect(() => {
@@ -126,6 +136,99 @@ export function CardPaymentDrawer({
     if (digits.length <= 9) return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6)}`;
     return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9)}`;
   };
+
+  const handleApproved = useCallback(async () => {
+    setStatus("approved");
+
+    // Send WhatsApp order confirmation after payment is confirmed
+    if (restaurantId && orderId) {
+      supabase.functions.invoke("whatsapp-bot", {
+        body: {
+          action: "send_order_confirmation",
+          restaurant_id: restaurantId,
+          order_id: orderId,
+        },
+      }).catch(() => {});
+    }
+
+    // Save order history
+    const { saveOrderToHistory } = await import("@/hooks/useOrderHistory");
+    saveOrderToHistory({
+      orderId: orderNumber,
+      customerName,
+      deliveryMethod,
+      total,
+      paymentStatus: "paid",
+      dbOrderId: orderId,
+      restaurantId,
+      restaurantSlug,
+    });
+
+    // Navigate after delay
+    setTimeout(() => {
+      clearCart();
+      onOpenChange(false);
+      const params = new URLSearchParams({
+        pedido: orderNumber,
+        nome: customerName,
+        entrega: deliveryMethod,
+        total: total.toString(),
+        ...(restaurantSlug ? { loja: restaurantSlug } : {}),
+      });
+      navigate(`/pedido?${params.toString()}`);
+    }, 2000);
+  }, [restaurantId, orderId, orderNumber, customerName, deliveryMethod, total, restaurantSlug, clearCart, onOpenChange, navigate]);
+
+  // Desafio 3DS: submete o creq no iframe e faz polling do resultado no backend
+  useEffect(() => {
+    if (status !== "challenge" || !challenge) return;
+
+    challengeFormRef.current?.submit();
+
+    const startedAt = Date.now();
+    const TIMEOUT_MS = 6 * 60 * 1000;
+    let stopped = false;
+
+    const interval = setInterval(async () => {
+      if (stopped) return;
+
+      if (Date.now() - startedAt > TIMEOUT_MS) {
+        stopped = true;
+        clearInterval(interval);
+        setStatus("in_process");
+        return;
+      }
+
+      try {
+        const { data } = await supabase.functions.invoke("check-card-status", {
+          body: {
+            order_id: orderId,
+            payment_id: challenge.payment_id,
+            restaurant_id: restaurantId,
+          },
+        });
+
+        if (!data?.success) return;
+
+        if (data.status === "approved") {
+          stopped = true;
+          clearInterval(interval);
+          handleApproved();
+        } else if (data.status === "rejected" || data.status === "cancelled") {
+          stopped = true;
+          clearInterval(interval);
+          setStatus("rejected");
+        }
+      } catch {
+        // erro transitório de rede: tenta de novo no próximo tick
+      }
+    }, 3000);
+
+    return () => {
+      stopped = true;
+      clearInterval(interval);
+    };
+  }, [status, challenge, orderId, restaurantId, handleApproved]);
 
   const handleSubmit = async () => {
     if (!mpInstance) {
@@ -193,45 +296,15 @@ export function CardPaymentDrawer({
       }
 
       if (data.status === "approved") {
-        setStatus("approved");
-
-        // Send WhatsApp order confirmation after payment is confirmed
-        if (restaurantId && orderId) {
-          supabase.functions.invoke("whatsapp-bot", {
-            body: {
-              action: "send_order_confirmation",
-              restaurant_id: restaurantId,
-              order_id: orderId,
-            },
-          }).catch(() => {});
-        }
-
-        // Save order history
-        const { saveOrderToHistory } = await import("@/hooks/useOrderHistory");
-        saveOrderToHistory({
-          orderId: orderNumber,
-          customerName,
-          deliveryMethod,
-          total,
-          paymentStatus: "paid",
-          dbOrderId: orderId,
-          restaurantId,
-          restaurantSlug,
+        handleApproved();
+      } else if (data.status === "pending_challenge" && data.three_ds?.external_resource_url && data.three_ds?.creq) {
+        // Banco exige autenticação 3DS: renderiza o desafio e faz polling do resultado
+        setChallenge({
+          external_resource_url: data.three_ds.external_resource_url,
+          creq: data.three_ds.creq,
+          payment_id: String(data.payment_id),
         });
-
-        // Navigate after delay
-        setTimeout(() => {
-          clearCart();
-          onOpenChange(false);
-          const params = new URLSearchParams({
-            pedido: orderNumber,
-            nome: customerName,
-            entrega: deliveryMethod,
-            total: total.toString(),
-            ...(restaurantSlug ? { loja: restaurantSlug } : {}),
-          });
-          navigate(`/pedido?${params.toString()}`);
-        }, 2000);
+        setStatus("challenge");
       } else if (data.status === "rejected") {
         setStatus("rejected");
       } else if (data.status === "in_process") {
@@ -252,6 +325,7 @@ export function CardPaymentDrawer({
   const handleRetry = () => {
     setStatus("form");
     setSecurityCode("");
+    setChallenge(null);
   };
 
   // Reset on close
@@ -268,6 +342,7 @@ export function CardPaymentDrawer({
       setInstallments("1");
       setPaymentMethodId("");
       setIssuerId("");
+      setChallenge(null);
     }
   }, [open]);
 
@@ -424,6 +499,33 @@ export function CardPaymentDrawer({
                   </div>
                 </>
               )}
+            </div>
+          )}
+
+          {status === "challenge" && challenge && (
+            <div className="flex flex-col items-center gap-3">
+              <p className="text-sm text-muted-foreground text-center">
+                Seu banco pediu uma confirmação de segurança. Autentique a compra abaixo para concluir o pagamento.
+              </p>
+              <form
+                ref={challengeFormRef}
+                method="POST"
+                action={challenge.external_resource_url}
+                target="mp-3ds-frame"
+                className="hidden"
+              >
+                <input type="hidden" name="creq" value={challenge.creq} />
+              </form>
+              <iframe
+                name="mp-3ds-frame"
+                title="Autenticação do banco"
+                className="w-full rounded-lg border border-border bg-background"
+                style={{ height: "min(500px, 60vh)" }}
+              />
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                Aguardando confirmação do banco...
+              </div>
             </div>
           )}
 
