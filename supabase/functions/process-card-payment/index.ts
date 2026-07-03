@@ -54,14 +54,21 @@ async function createCardPaymentRequest(
   accessToken: string,
   orderId: string,
   body: Record<string, unknown>,
+  deviceId: string | null,
 ): Promise<CardResult> {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    "Authorization": `Bearer ${accessToken}`,
+    "X-Idempotency-Key": `card-${orderId}-${body.application_fee ? 'fee' : 'nofee'}`,
+  };
+  // Device fingerprint do SDK do MP — sinal antifraude importante para reduzir cc_rejected_high_risk.
+  if (deviceId) {
+    headers["X-meli-session-id"] = deviceId;
+  }
+
   const response = await fetch("https://api.mercadopago.com/v1/payments", {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${accessToken}`,
-      "X-Idempotency-Key": `card-${orderId}-${body.application_fee ? 'fee' : 'nofee'}`,
-    },
+    headers,
     body: JSON.stringify(body),
   });
 
@@ -82,6 +89,14 @@ async function createCardPaymentRequest(
   };
 }
 
+interface CardPaymentExtras {
+  deviceId: string | null;
+  payerFirstName: string | null;
+  payerLastName: string | null;
+  additionalItems: Array<Record<string, unknown>>;
+  restaurantName: string;
+}
+
 async function createCardPayment(
   accessToken: string,
   token: string,
@@ -93,8 +108,29 @@ async function createCardPayment(
   payerDocNumber: string,
   paymentMethodId: string,
   issuerId: string | null,
+  extras: CardPaymentExtras,
 ): Promise<CardResult> {
   logStep("Creating card payment via Mercado Pago", { amount, orderId, paymentMethodId });
+
+  const payer: Record<string, unknown> = {
+    email: payerEmail,
+    identification: {
+      type: "CPF",
+      number: payerDocNumber || "",
+    },
+  };
+  if (extras.payerFirstName) payer.first_name = extras.payerFirstName;
+  if (extras.payerLastName) payer.last_name = extras.payerLastName;
+
+  // additional_info enriquece o score antifraude (itens + dados do pagador).
+  const additionalInfo: Record<string, unknown> = {};
+  if (extras.additionalItems.length > 0) additionalInfo.items = extras.additionalItems;
+  if (extras.payerFirstName || extras.payerLastName) {
+    additionalInfo.payer = {
+      first_name: extras.payerFirstName || undefined,
+      last_name: extras.payerLastName || undefined,
+    };
+  }
 
   const baseBody: Record<string, unknown> = {
     transaction_amount: amount,
@@ -102,15 +138,14 @@ async function createCardPayment(
     description,
     installments: installments || 1,
     payment_method_id: paymentMethodId,
-    payer: {
-      email: payerEmail,
-      identification: {
-        type: "CPF",
-        number: payerDocNumber || "",
-      },
-    },
+    payer,
     external_reference: orderId,
+    statement_descriptor: extras.restaurantName?.slice(0, 22) || undefined,
   };
+
+  if (Object.keys(additionalInfo).length > 0) {
+    baseBody.additional_info = additionalInfo;
+  }
 
   if (issuerId) {
     baseBody.issuer_id = issuerId;
@@ -122,7 +157,7 @@ async function createCardPayment(
     application_fee: Math.round((0.50 + amount * 0.005) * 100) / 100,
   };
 
-  let result = await createCardPaymentRequest(accessToken, orderId, withFeeBody);
+  let result = await createCardPaymentRequest(accessToken, orderId, withFeeBody, extras.deviceId);
 
   // If application_fee not supported, retry without it
   if (result.error) {
@@ -133,7 +168,7 @@ async function createCardPayment(
 
     if (shouldRetryWithoutFee) {
       logStep("application_fee not supported, retrying without fee");
-      result = await createCardPaymentRequest(accessToken, orderId, baseBody);
+      result = await createCardPaymentRequest(accessToken, orderId, baseBody, extras.deviceId);
     }
   }
 
@@ -178,6 +213,9 @@ serve(async (req) => {
       payer_doc_number,
       payment_method_id,
       issuer_id,
+      device_id,
+      payer_first_name,
+      payer_last_name,
     } = await req.json();
 
     orderId = order_id;
@@ -210,7 +248,7 @@ serve(async (req) => {
     // Fetch order
     const { data: order, error: orderError } = await supabaseClient
       .from("orders")
-      .select("total, order_number, daily_number")
+      .select("total, order_number, daily_number, items")
       .eq("id", orderId)
       .eq("restaurant_id", restaurantId)
       .single();
@@ -220,6 +258,24 @@ serve(async (req) => {
     }
 
     const description = `Pedido #${order.daily_number || order.order_number} - ${restaurant.name}`;
+
+    // Monta os itens para additional_info (sinal antifraude do Mercado Pago).
+    const orderItems = Array.isArray(order.items) ? order.items : [];
+    const additionalItems = orderItems.map((it: any, idx: number) => ({
+      id: String(it.productId || idx),
+      title: String(it.name || "Item"),
+      quantity: Number(it.quantity) || 1,
+      unit_price: Number(it.price ?? 0) + Number(it.addonsTotal ?? 0),
+      category_id: "food",
+    }));
+
+    const extras: CardPaymentExtras = {
+      deviceId: device_id || null,
+      payerFirstName: payer_first_name || null,
+      payerLastName: payer_last_name || null,
+      additionalItems,
+      restaurantName: restaurant.name,
+    };
 
     let result = await createCardPayment(
       restaurant.pix_gateway_token,
@@ -232,6 +288,7 @@ serve(async (req) => {
       payer_doc_number || "",
       payment_method_id,
       issuer_id || null,
+      extras,
     );
 
     // If 401, try refreshing token
@@ -243,7 +300,7 @@ serve(async (req) => {
           newToken, token, order.total, description, orderId,
           installments || 1, payer_email || `pedido-${orderId}@menufly.app`,
           payer_doc_number || "",
-          payment_method_id, issuer_id || null,
+          payment_method_id, issuer_id || null, extras,
         );
       }
     }

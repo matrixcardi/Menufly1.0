@@ -150,13 +150,13 @@ export function PixPaymentDrawer({
       try {
         const { data: restaurant, error: fetchError } = await supabase
           .from("restaurants")
-          .select("pix_gateway, pix_gateway_token")
+          .select("pix_gateway, pix_gateway_connected")
           .eq("id", restaurantId)
           .single();
 
         if (fetchError) throw new Error("Erro ao buscar dados do restaurante");
 
-        const hasGateway = (restaurant as any).pix_gateway && (restaurant as any).pix_gateway_token;
+        const hasGateway = (restaurant as any).pix_gateway && (restaurant as any).pix_gateway_connected;
         if (!hasGateway) {
           throw new Error("PIX indisponível no momento para este restaurante.");
         }

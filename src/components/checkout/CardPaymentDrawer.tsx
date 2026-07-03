@@ -66,6 +66,17 @@ export function CardPaymentDrawer({
   useEffect(() => {
     if (!open || !mpPublicKey) return;
 
+    // Device fingerprint do Mercado Pago: popula window.MP_DEVICE_SESSION_ID, sinal
+    // antifraude que reduz rejeições cc_rejected_high_risk. Carregado uma única vez.
+    if (!document.getElementById("mp-device-script")) {
+      const deviceScript = document.createElement("script");
+      deviceScript.id = "mp-device-script";
+      deviceScript.src = "https://www.mercadopago.com/v2/security.js";
+      deviceScript.setAttribute("view", "checkout");
+      deviceScript.async = true;
+      document.head.appendChild(deviceScript);
+    }
+
     const loadMP = async () => {
       // Load script if not present
       if (!document.getElementById("mp-sdk-script")) {
@@ -151,6 +162,11 @@ export function CardPaymentDrawer({
         throw new Error("Erro ao tokenizar cartão");
       }
 
+      // Divide o nome do titular em first/last name para enriquecer o payer no MP.
+      const nameParts = cardholderName.trim().split(/\s+/);
+      const payerFirstName = nameParts[0] || null;
+      const payerLastName = nameParts.length > 1 ? nameParts.slice(1).join(" ") : null;
+
       // Send to backend
       const { data, error } = await supabase.functions.invoke("process-card-payment", {
         body: {
@@ -162,6 +178,9 @@ export function CardPaymentDrawer({
           payer_doc_number: docNumber.replace(/\D/g, ""),
           payment_method_id: paymentMethodId,
           issuer_id: issuerId || null,
+          device_id: (window as any).MP_DEVICE_SESSION_ID || null,
+          payer_first_name: payerFirstName,
+          payer_last_name: payerLastName,
         },
       });
 

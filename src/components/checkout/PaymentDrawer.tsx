@@ -92,13 +92,13 @@ export function PaymentDrawer({
     if (!restaurantId) return;
     supabase
       .from("restaurants")
-      .select("pix_enabled, pix_gateway, pix_gateway_token, cash_enabled, card_on_delivery_enabled, card_online_enabled, mp_public_key, pix_on_delivery_enabled")
+      .select("pix_enabled, pix_gateway, pix_gateway_connected, cash_enabled, card_on_delivery_enabled, card_online_enabled, mp_public_key, pix_on_delivery_enabled")
       .eq("id", restaurantId)
       .single()
       .then(({ data }) => {
         if (data) {
           const d = data as any;
-          const hasGateway = d.pix_gateway && d.pix_gateway_token;
+          const hasGateway = d.pix_gateway && d.pix_gateway_connected;
           setPixEnabled(d.pix_enabled === true && hasGateway);
           setCashEnabled(d.cash_enabled ?? true);
           setCardEnabled(d.card_on_delivery_enabled ?? true);

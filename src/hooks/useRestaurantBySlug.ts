@@ -125,10 +125,14 @@ export function useRestaurantBySlug(slug?: string): RestaurantStatus {
       setLoading(true);
       setNotFound(false);
       
-      // Fetch restaurant by slug
+      // Fetch restaurant by slug.
+      // Colunas explícitas (sem segredos): a role anon não tem mais SELECT em
+      // pix_gateway_token/mp_refresh_token/card_gateway_token/meta_access_token, então
+      // um select("*") falharia com "permission denied for column". Ver migration
+      // 20260703120000_protect_payment_secrets_from_anon.sql.
       const { data: restaurantData, error } = await supabase
         .from("restaurants")
-        .select("*")
+        .select("address, address_cep, address_city, address_complement, address_neighborhood, address_number, address_state, address_street, banner_url, bot_auto_reply_enabled, bot_enabled, bot_feedback_enabled, bot_greeting_message, bot_order_updates, card_enabled, card_gateway, card_on_delivery_enabled, card_online_enabled, cash_enabled, closing_time, created_at, default_delivery_fee, default_delivery_time_min, delivery_available, delivery_method, delivery_mode, description, free_shipping_threshold, ga_measurement_id, google_review_link, gtm_container_id, id, instagram_url, is_open, logo_url, manual_override_until, menu_theme, meta_pixel_id, min_order, mp_public_key, name, notification_sound, opening_time, operation_mode, pickup_available, pix_enabled, pix_gateway, pix_key, pix_on_delivery_enabled, restaurant_lat, restaurant_lng, slug, stripe_publishable_key, subscription_active, trial_email_d, trial_ends_at, updated_at, user_id, whatsapp_connected, whatsapp_instance_name, whatsapp_phone, pix_gateway_connected")
         .eq("slug", slug)
         .maybeSingle();
 
