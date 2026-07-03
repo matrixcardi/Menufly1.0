@@ -1894,6 +1894,7 @@ export type Database = {
           meta_access_token: string | null
           meta_pixel_id: string | null
           min_order: number | null
+          mp_3ds_mode: string
           mp_public_key: string | null
           mp_refresh_token: string | null
           name: string
@@ -1964,6 +1965,7 @@ export type Database = {
           meta_access_token?: string | null
           meta_pixel_id?: string | null
           min_order?: number | null
+          mp_3ds_mode?: string
           mp_public_key?: string | null
           mp_refresh_token?: string | null
           name?: string
@@ -2034,6 +2036,7 @@ export type Database = {
           meta_access_token?: string | null
           meta_pixel_id?: string | null
           min_order?: number | null
+          mp_3ds_mode?: string
           mp_public_key?: string | null
           mp_refresh_token?: string | null
           name?: string

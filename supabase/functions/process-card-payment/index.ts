@@ -104,6 +104,7 @@ interface CardPaymentExtras {
   payerLastName: string | null;
   additionalItems: Array<Record<string, unknown>>;
   restaurantName: string;
+  threeDsMode: "optional" | "mandatory";
 }
 
 async function createCardPayment(
@@ -150,9 +151,10 @@ async function createCardPayment(
     payer,
     external_reference: orderId,
     statement_descriptor: extras.restaurantName?.slice(0, 22) || undefined,
-    // 3DS 2.0: o MP decide quando exigir o desafio do banco. Converte parte das
-    // recusas cc_rejected_high_risk em autenticação + aprovação.
-    three_d_secure_mode: "optional",
+    // 3DS 2.0: em "optional" o MP decide quando exigir o desafio do banco; em
+    // "mandatory" (configurável por restaurante via restaurants.mp_3ds_mode) todo
+    // pagamento passa pela autenticação do emissor — usado contra cc_rejected_high_risk.
+    three_d_secure_mode: extras.threeDsMode,
   };
 
   if (Object.keys(additionalInfo).length > 0) {
@@ -245,7 +247,7 @@ serve(async (req) => {
     // Fetch restaurant
     const { data: restaurant, error: restError } = await supabaseClient
       .from("restaurants")
-      .select("pix_gateway, pix_gateway_token, mp_refresh_token, name")
+      .select("pix_gateway, pix_gateway_token, mp_refresh_token, name, mp_3ds_mode")
       .eq("id", restaurantId)
       .single();
 
@@ -287,6 +289,7 @@ serve(async (req) => {
       payerLastName: payer_last_name || null,
       additionalItems,
       restaurantName: restaurant.name,
+      threeDsMode: restaurant.mp_3ds_mode === "mandatory" ? "mandatory" : "optional",
     };
 
     let result = await createCardPayment(
