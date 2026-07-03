@@ -64,7 +64,9 @@ async function createCardPaymentRequest(
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
     "Authorization": `Bearer ${accessToken}`,
-    "X-Idempotency-Key": `card-${orderId}-${body.application_fee ? 'fee' : 'nofee'}`,
+    // O modo 3DS entra na chave: o fallback mandatory→optional reenvia com body
+    // diferente, e o MP responde 409 se a chave repetir com payload alterado.
+    "X-Idempotency-Key": `card-${orderId}-${body.three_d_secure_mode}-${body.application_fee ? 'fee' : 'nofee'}`,
   };
   // Device fingerprint do SDK do MP — sinal antifraude importante para reduzir cc_rejected_high_risk.
   if (deviceId) {
@@ -151,10 +153,6 @@ async function createCardPayment(
     payer,
     external_reference: orderId,
     statement_descriptor: extras.restaurantName?.slice(0, 22) || undefined,
-    // 3DS 2.0: em "optional" o MP decide quando exigir o desafio do banco; em
-    // "mandatory" (configurável por restaurante via restaurants.mp_3ds_mode) todo
-    // pagamento passa pela autenticação do emissor — usado contra cc_rejected_high_risk.
-    three_d_secure_mode: extras.threeDsMode,
   };
 
   if (Object.keys(additionalInfo).length > 0) {
@@ -165,25 +163,46 @@ async function createCardPayment(
     baseBody.issuer_id = issuerId;
   }
 
-  // Try with application_fee first
-  const withFeeBody = {
-    ...baseBody,
-    application_fee: Math.round((0.50 + amount * 0.005) * 100) / 100,
+  // 3DS 2.0: em "optional" o MP decide quando exigir o desafio do banco; em
+  // "mandatory" (configurável por restaurante via restaurants.mp_3ds_mode) todo
+  // pagamento passa pela autenticação do emissor — usado contra cc_rejected_high_risk.
+  const attempt = async (threeDsMode: "optional" | "mandatory"): Promise<CardResult> => {
+    const body = { ...baseBody, three_d_secure_mode: threeDsMode };
+
+    // Try with application_fee first
+    const withFeeBody = {
+      ...body,
+      application_fee: Math.round((0.50 + amount * 0.005) * 100) / 100,
+    };
+
+    let result = await createCardPaymentRequest(accessToken, orderId, withFeeBody, extras.deviceId);
+
+    // If application_fee not supported, retry without it
+    if (result.error) {
+      const lowerBody = result.body.toLowerCase();
+      const shouldRetryWithoutFee =
+        result.status === 400 &&
+        (lowerBody.includes("application_fee") || lowerBody.includes("code\":2059"));
+
+      if (shouldRetryWithoutFee) {
+        logStep("application_fee not supported, retrying without fee");
+        result = await createCardPaymentRequest(accessToken, orderId, body, extras.deviceId);
+      }
+    }
+
+    return result;
   };
 
-  let result = await createCardPaymentRequest(accessToken, orderId, withFeeBody, extras.deviceId);
+  let result = await attempt(extras.threeDsMode);
 
-  // If application_fee not supported, retry without it
-  if (result.error) {
-    const lowerBody = result.body.toLowerCase();
-    const shouldRetryWithoutFee =
-      result.status === 400 &&
-      (lowerBody.includes("application_fee") || lowerBody.includes("code\":2059"));
-
-    if (shouldRetryWithoutFee) {
-      logStep("application_fee not supported, retrying without fee");
-      result = await createCardPaymentRequest(accessToken, orderId, baseBody, extras.deviceId);
-    }
+  // Se a criação falhar com "mandatory" (erro HTTP do MP, não recusa de risco),
+  // cai para "optional" — a config de 3DS nunca deve bloquear o pagamento.
+  if (result.error && extras.threeDsMode === "mandatory") {
+    logStep("Mandatory 3DS failed at creation, falling back to optional", {
+      status: result.status,
+      body: result.body.slice(0, 800),
+    });
+    result = await attempt("optional");
   }
 
   return result;
