@@ -340,7 +340,7 @@ export default function LandingPage() {
                 <Zap className="ml-2 w-5 h-5" />
               </Button>
               <Button size="lg" variant="ghost" className="text-base px-8 py-6 text-white/80 hover:text-white hover:bg-white/[0.06] rounded-full border border-white/10" asChild>
-                <a href="https://wa.me/5551995135594?text=Ol%C3%A1%21%20Quero%20falar%20com%20um%20especialista%20do%20MenuFly." target="_blank" rel="noopener noreferrer">
+                <a href="https://wa.me/5551991293517?text=Ol%C3%A1%21%20Quero%20falar%20com%20um%20especialista%20do%20MenuFly." target="_blank" rel="noopener noreferrer">
                   Falar com um especialista
                   <MessageCircle className="ml-2 w-5 h-5" />
                 </a>
