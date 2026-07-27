@@ -50,7 +50,7 @@ const WelcomeMenuFlyEmail = ({ name, email, password, restaurantName, planName }
 
         <Section style={credentialsBox}>
           <Text style={credentialLabel}>🔗 Painel Administrativo:</Text>
-          <Text style={credentialValue}>menufly.lovable.app/admin</Text>
+          <Text style={credentialValue}>menufly.com.br/admin</Text>
 
           <Text style={credentialLabel}>📧 Login (email):</Text>
           <Text style={credentialValue}>{email || 'Seu email cadastrado'}</Text>
@@ -61,7 +61,7 @@ const WelcomeMenuFlyEmail = ({ name, email, password, restaurantName, planName }
 
         <Section style={{ textAlign: 'center' as const, margin: '30px 0' }}>
           <Button
-            href="https://menufly.lovable.app/admin"
+            href="https://menufly.com.br/admin"
             style={button}
           >
             Acessar Meu Painel →

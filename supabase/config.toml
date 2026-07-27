@@ -1,10 +1,11 @@
-project_id = "tviknowihpwolwfjuwog"
+project_id = "yiwhokrotzodahdefjaf"
 
 [auth]
-site_url = "https://menufly.lovable.app"
+site_url = "https://menufly.com.br"
 additional_redirect_urls = [
-  "https://menufly.lovable.app/admin/reset-password",
-  "https://id-preview--7c949e48-0a46-47da-a818-5948abd25083.lovable.app/admin/reset-password"
+  "https://menufly.com.br/admin/reset-password",
+  "https://www.menufly.com.br/admin/reset-password",
+  "http://localhost:8080/admin/reset-password"
 ]
 
 [functions.check-subscription]
@@ -60,9 +61,6 @@ verify_jwt = true
 
 [functions.send-transactional-email]
 verify_jwt = true
-
-[functions.preview-transactional-email]
-verify_jwt = false
 
 [functions.handle-email-unsubscribe]
 verify_jwt = false

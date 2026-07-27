@@ -16,8 +16,9 @@ serve(async (req) => {
   const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
   const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 
-  // Determine redirect URL based on environment
-  const redirectBase = "https://menufly.lovable.app";
+  // Redirect base — must match a redirect URI registered in the Mercado Pago
+  // developer panel; update there before deploying a change here.
+  const redirectBase = "https://menufly.com.br";
 
   if (!code || !state) {
     logStep("Missing code or state", { code: !!code, state: !!state });

@@ -92,7 +92,8 @@ import { Logo } from "@/components/Logo";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useToast } from "@/hooks/use-toast";
-import { HelpChatWidget } from "@/components/admin/HelpChatWidget";
+// IA desativada temporariamente
+// import { HelpChatWidget } from "@/components/admin/HelpChatWidget";
 import { CashRegisterDialog } from "@/components/admin/CashRegisterDialog";
 import { useSubscriptionAlert } from "@/hooks/useSubscriptionAlert";
 import { SubscriptionExpiryBanner } from "@/components/admin/SubscriptionExpiryBanner";
@@ -1151,7 +1152,8 @@ function AdminLayoutInner() {
         </div>
       </SidebarProvider>
 
-      <HelpChatWidget />
+      {/* IA desativada temporariamente */}
+      {/* <HelpChatWidget /> */}
 
       <AlertDialog open={showCloseConfirm} onOpenChange={setShowCloseConfirm}>
         <AlertDialogContent>

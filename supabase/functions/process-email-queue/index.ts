@@ -1,15 +1,76 @@
-import { sendLovableEmail } from 'npm:@lovable.dev/email-js'
 import { createClient } from 'npm:@supabase/supabase-js@2'
 
 const MAX_RETRIES = 5
 const DEFAULT_BATCH_SIZE = 10
-const DEFAULT_SEND_DELAY_MS = 200
+// Resend rate limit is 2 req/s by default — keep sends comfortably under it.
+const DEFAULT_SEND_DELAY_MS = 600
 const DEFAULT_AUTH_TTL_MINUTES = 15
 const DEFAULT_TRANSACTIONAL_TTL_MINUTES = 60
 
+// Structured error from the Resend API with the fields the retry/DLQ
+// helpers below rely on.
+class EmailAPIError extends Error {
+  constructor(
+    public status: number,
+    public retryAfterSeconds: number | null,
+    message: string
+  ) {
+    super(message)
+  }
+}
+
+// Send one email through the Resend API. Throws EmailAPIError on failure so
+// isRateLimited/isForbidden/getRetryAfterSeconds can classify it.
+async function sendResendEmail(
+  payload: Record<string, unknown>,
+  apiKey: string,
+  supabaseUrl: string
+): Promise<{ id?: string }> {
+  const unsubscribeUrl = payload.unsubscribe_token
+    ? `${supabaseUrl}/functions/v1/handle-email-unsubscribe?token=${payload.unsubscribe_token}`
+    : null
+
+  const resp = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+      ...(payload.idempotency_key
+        ? { 'Idempotency-Key': String(payload.idempotency_key) }
+        : {}),
+    },
+    body: JSON.stringify({
+      from: payload.from,
+      to: [payload.to],
+      subject: payload.subject,
+      html: payload.html,
+      text: payload.text,
+      ...(unsubscribeUrl
+        ? {
+            headers: {
+              'List-Unsubscribe': `<${unsubscribeUrl}>`,
+              'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+            },
+          }
+        : {}),
+    }),
+  })
+
+  if (!resp.ok) {
+    const retryAfter = parseInt(resp.headers.get('retry-after') ?? '', 10)
+    throw new EmailAPIError(
+      resp.status,
+      Number.isFinite(retryAfter) ? retryAfter : null,
+      await resp.text()
+    )
+  }
+
+  return await resp.json()
+}
+
 // Check if an error is a rate-limit (429) response.
-// Uses EmailAPIError.status when available (email-js >=0.x with structured errors),
-// falls back to parsing the error message for older versions.
+// Uses EmailAPIError.status when available, falls back to parsing the
+// error message.
 function isRateLimited(error: unknown): boolean {
   if (error && typeof error === 'object' && 'status' in error) {
     return (error as { status: number }).status === 429
@@ -17,13 +78,15 @@ function isRateLimited(error: unknown): boolean {
   return error instanceof Error && error.message.includes('429')
 }
 
-// Check if an error is a forbidden (403) response, which means emails are
-// disabled for this project. Retrying won't help — move straight to DLQ.
+// Check if an error is unrecoverable auth/authorization failure.
+// Resend: 401 = invalid API key, 403 = domain not verified / not allowed.
+// Retrying won't help — move straight to DLQ.
 function isForbidden(error: unknown): boolean {
   if (error && typeof error === 'object' && 'status' in error) {
-    return (error as { status: number }).status === 403
+    const status = (error as { status: number }).status
+    return status === 401 || status === 403
   }
-  return error instanceof Error && error.message.includes('403')
+  return error instanceof Error && (error.message.includes('403') || error.message.includes('401'))
 }
 
 // Extract Retry-After seconds from a structured EmailAPIError, or default to 60s.
@@ -79,7 +142,7 @@ async function moveToDlq(
 }
 
 Deno.serve(async (req) => {
-  const apiKey = Deno.env.get('LOVABLE_API_KEY')
+  const apiKey = Deno.env.get('RESEND_API_KEY')
   const supabaseUrl = Deno.env.get('SUPABASE_URL')
   const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
 
@@ -246,33 +309,15 @@ Deno.serve(async (req) => {
       }
 
       try {
-        await sendLovableEmail(
-          {
-            run_id: payload.run_id,
-            to: payload.to,
-            from: payload.from,
-            sender_domain: payload.sender_domain,
-            subject: payload.subject,
-            html: payload.html,
-            text: payload.text,
-            purpose: payload.purpose,
-            label: payload.label,
-            idempotency_key: payload.idempotency_key,
-            unsubscribe_token: payload.unsubscribe_token,
-            message_id: payload.message_id,
-          },
-          // sendUrl is optional — when LOVABLE_SEND_URL is not set, the library
-          // falls back to the default Lovable API endpoint (https://api.lovable.dev).
-          // Set LOVABLE_SEND_URL as a Supabase secret to override (e.g. for local dev).
-          { apiKey, sendUrl: Deno.env.get('LOVABLE_SEND_URL') }
-        )
+        const sent = await sendResendEmail(payload, apiKey, supabaseUrl)
 
-        // Log success
+        // Log success (provider id kept for webhook correlation)
         await supabase.from('email_send_log').insert({
           message_id: payload.message_id,
           template_name: payload.label || queue,
           recipient_email: payload.to,
           status: 'sent',
+          metadata: sent?.id ? { provider_email_id: sent.id } : null,
         })
 
         // Delete from queue
@@ -321,10 +366,10 @@ Deno.serve(async (req) => {
           )
         }
 
-        // 403 means emails are disabled for this project — retrying won't help.
-        // Move straight to DLQ and stop processing the rest of the batch.
+        // 401/403 means the API key is invalid or the sender domain is not
+        // verified — retrying won't help. Move straight to DLQ and stop.
         if (isForbidden(error)) {
-          await moveToDlq(supabase, queue, msg, 'Emails disabled for this project')
+          await moveToDlq(supabase, queue, msg, 'Email provider rejected the request (auth/domain)')
           return new Response(
             JSON.stringify({ processed: totalProcessed, stopped: 'emails_disabled' }),
             { headers: { 'Content-Type': 'application/json' } }

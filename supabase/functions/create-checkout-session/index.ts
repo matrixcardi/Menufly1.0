@@ -69,7 +69,7 @@ serve(async (req) => {
       }
     }
 
-    const origin = req.headers.get("origin") || "https://menufly.lovable.app";
+    const origin = req.headers.get("origin") || "https://menufly.com.br";
 
     // Create checkout session with ui_mode: 'embedded' for Stripe Elements
     const session = await stripe.checkout.sessions.create({
