@@ -30,7 +30,7 @@ export const faqItems: FaqItem[] = [
   {
     question: "Como meus clientes acessam o cardápio?",
     answer:
-      "Seu cardápio fica disponível em um link exclusivo (ex: menufly.lovable.app/seu-restaurante). Basta compartilhar o link nas redes sociais, WhatsApp ou imprimir um QR Code. Não é necessário instalar nenhum aplicativo.",
+      "Seu cardápio fica disponível em um link exclusivo (ex: menufly.com.br/seu-restaurante). Basta compartilhar o link nas redes sociais, WhatsApp ou imprimir um QR Code. Não é necessário instalar nenhum aplicativo.",
   },
   {
     question: "Preciso pagar taxa por pedido?",
@@ -737,7 +737,7 @@ A base de clientes é essencial para campanhas de marketing e fidelização.`,
 - Tema do cardápio (claro ou escuro)
 
 **Slug (link personalizado):**
-- Seu cardápio fica em: menufly.lovable.app/seu-slug
+- Seu cardápio fica em: menufly.com.br/seu-slug
 - Escolha um slug curto e fácil de lembrar
 - Ex: /pizzaria-do-joao, /sushi-master
 

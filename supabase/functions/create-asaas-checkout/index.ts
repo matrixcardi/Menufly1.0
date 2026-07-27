@@ -29,7 +29,7 @@ serve(async (req) => {
       // no body
     }
 
-    const origin = req.headers.get("origin") || "https://menufly.lovable.app";
+    const origin = req.headers.get("origin") || "https://menufly.com.br";
 
     // Create a payment link for recurring subscription
     const paymentLinkResponse = await fetch(`${ASAAS_API_URL}/paymentLinks`, {

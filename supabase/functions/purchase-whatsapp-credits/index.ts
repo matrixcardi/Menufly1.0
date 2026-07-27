@@ -77,8 +77,8 @@ Deno.serve(async (req) => {
           currency_id: "BRL",
         }],
         back_urls: {
-          success: `${req.headers.get("origin") || "https://menufly.lovable.app"}/admin/campanhas?credits_purchased=${pkg.credits}`,
-          failure: `${req.headers.get("origin") || "https://menufly.lovable.app"}/admin/campanhas?credits_error=true`,
+          success: `${req.headers.get("origin") || "https://menufly.com.br"}/admin/campanhas?credits_purchased=${pkg.credits}`,
+          failure: `${req.headers.get("origin") || "https://menufly.com.br"}/admin/campanhas?credits_error=true`,
         },
         auto_return: "approved",
         external_reference: JSON.stringify({

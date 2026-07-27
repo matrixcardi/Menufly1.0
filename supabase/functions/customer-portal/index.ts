@@ -74,7 +74,7 @@ serve(async (req) => {
     const customerId = customers.data[0].id;
     logStep("Found Stripe customer", { customerId });
 
-    const returnUrl = origin || "https://menufly.lovable.app";
+    const returnUrl = origin || "https://menufly.com.br";
     logStep("Creating portal session", { customerId, returnUrl });
     const portalSession = await stripe.billingPortal.sessions.create({
       customer: customerId,

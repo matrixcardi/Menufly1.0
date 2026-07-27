@@ -2,18 +2,14 @@
 // Restricts access to known origins only
 
 const allowedOrigins = [
-  "https://menufly.lovable.app",
   "https://menufly.com.br",
   "https://www.menufly.com.br",
-  "https://id-preview--7c949e48-0a46-47da-a818-5948abd25083.lovable.app",
   "http://localhost:5173",
   "http://localhost:5174",
   "http://localhost:8080",
 ];
 
 const allowedOriginSuffixes = [
-  ".lovable.app",
-  ".lovableproject.com",
   ".ngrok-free.dev",
 ];
 

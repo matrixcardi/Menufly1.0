@@ -33,7 +33,7 @@ export async function geocodeAddress(address: string): Promise<GeocodingResult> 
       `https://nominatim.openstreetmap.org/search?format=json&q=${encodedAddress}&limit=1`,
       {
         headers: {
-          "User-Agent": "LovableRestaurantApp/1.0",
+          "User-Agent": "MenuFly/1.0 (contato@menufly.com.br)",
         },
       }
     );
@@ -166,7 +166,7 @@ export async function reverseGeocode(lat: number, lng: number): Promise<ReverseG
   try {
     const res = await fetch(
       `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`,
-      { headers: { "User-Agent": "LovableRestaurantApp/1.0", "Accept-Language": "pt-BR" } }
+      { headers: { "User-Agent": "MenuFly/1.0 (contato@menufly.com.br)", "Accept-Language": "pt-BR" } }
     );
     if (!res.ok) return { success: false, error: "Erro ao buscar endereço" };
     const data = await res.json();

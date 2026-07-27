@@ -62,7 +62,7 @@ serve(async (req) => {
       logStep("Existing customer found", { customerId });
     }
 
-    const returnOrigin = origin || "https://menufly.lovable.app";
+    const returnOrigin = origin || "https://menufly.com.br";
 
     const lineItems: any[] = [{ price: priceId, quantity: 1 }];
     if (includeImplementation) {
