@@ -1,6 +1,5 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
-import Stripe from "https://esm.sh/stripe@18.5.0";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -15,8 +14,6 @@ serve(async (req) => {
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
     { auth: { persistSession: false } }
   );
-
-  const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") ?? "", { apiVersion: "2025-08-27.basil" });
 
   const { data: restaurants } = await supabase
     .from("restaurants")
@@ -37,13 +34,17 @@ serve(async (req) => {
     const email = userResp?.user?.email;
     if (!email) continue;
 
-    // Check Stripe subscription
-    const customers = await stripe.customers.list({ email, limit: 1 });
-    let hasActiveSub = false;
-    if (customers.data.length > 0) {
-      const subs = await stripe.subscriptions.list({ customer: customers.data[0].id, status: "active", limit: 1 });
-      hasActiveSub = subs.data.length > 0;
-    }
+    // Assinatura paga vigente (HyperCash ou PIX) dispensa os lembretes de trial.
+    const { data: sub } = await supabase
+      .from("platform_subscriptions")
+      .select("status, current_period_end")
+      .eq("user_id", r.user_id)
+      .maybeSingle();
+
+    const hasActiveSub = !!sub
+      && sub.status !== "canceled"
+      && !!sub.current_period_end
+      && new Date(sub.current_period_end).getTime() > now;
 
     // Trial expired and no active sub -> deactivate
     if (msLeft <= 0 && !hasActiveSub) {

@@ -33,7 +33,7 @@ import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerFooter } from "
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
-import { Users, Search, Mail, Calendar, Store, Pencil, Loader2, RefreshCw, DollarSign, AlertTriangle, Download, Filter, ChevronDown, User, Building2, CreditCard, Clock, XCircle, CheckCircle2 } from "lucide-react";
+import { Users, Search, Mail, Calendar, Store, Pencil, Loader2, DollarSign, AlertTriangle, Download, Filter, ChevronDown, User, Building2, CreditCard, Clock, XCircle, CheckCircle2 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 
 interface Account {
@@ -72,7 +72,6 @@ export default function MasterAccounts() {
   const [editRestaurantName, setEditRestaurantName] = useState<string>("");
   const [editRestaurantSlug, setEditRestaurantSlug] = useState<string>("");
   const [saving, setSaving] = useState(false);
-  const [syncing, setSyncing] = useState(false);
   const [selectedAccounts, setSelectedAccounts] = useState<Set<string>>(new Set());
   const [showBulkActions, setShowBulkActions] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -479,23 +478,6 @@ export default function MasterAccounts() {
   };
 
 
-  const syncStripe = async () => {
-    setSyncing(true);
-    try {
-      const { data, error } = await supabase.functions.invoke("sync-stripe-subscriptions");
-      if (error) throw error;
-      toast({
-        title: "Sincronização concluída",
-        description: `${data?.updated ?? 0} conta(s) atualizadas a partir do Stripe.`,
-      });
-      await fetchAccounts();
-    } catch (err: any) {
-      toast({ title: "Erro ao sincronizar", description: err.message, variant: "destructive" });
-    } finally {
-      setSyncing(false);
-    }
-  };
-
   return (
     <div className="p-6 md:p-10 w-full space-y-6">
       <div>
@@ -505,12 +487,6 @@ export default function MasterAccounts() {
         <p className="text-muted-foreground mt-1">
           Visualize todos os usuários cadastrados no sistema, ativos ou não.
         </p>
-        <div className="mt-3">
-          <Button onClick={syncStripe} disabled={syncing} variant="outline" size="sm">
-            {syncing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-2" />}
-            Sincronizar pagamentos Stripe
-          </Button>
-        </div>
       </div>
 
       {/* Stats */}

@@ -218,15 +218,26 @@ Roles disponíveis: `owner`, `manager`, `cashier`, `kitchen`, `delivery`. Verifi
 ### Gateways suportados
 | Gateway | Uso |
 |---|---|
-| Stripe | Cartão de crédito (assinaturas plataforma) |
-| Mercado Pago | Cartão + PIX (restaurantes brasileiros) |
+| HyperCash | Cartão de crédito (assinatura da plataforma) |
+| Mercado Pago | PIX da assinatura + cartão/PIX dos pedidos dos restaurantes |
 | PIX direto | Pagamento manual confirmado pelo admin |
 
 ### Regra de ouro
 **Nunca processar pagamento no frontend.** Todo processamento passa por Edge Functions:
-- `supabase/functions/create-checkout/` — Stripe
-- `supabase/functions/generate-pix/` — PIX
-- `supabase/functions/process-card-payment/` — cartão MP
+- `supabase/functions/hypercash-create-transaction/` — cartão da assinatura
+- `supabase/functions/create-pix-subscription/` — PIX da assinatura
+- `supabase/functions/generate-pix/` — PIX de pedido
+- `supabase/functions/process-card-payment/` — cartão de pedido (MP)
+
+Exceção: o número do cartão da assinatura é tokenizado **no browser** pelo SDK da
+HyperCash (`FastSoft.encrypt`) e só o token trafega até a Edge Function — o dado
+sensível nunca toca nossos servidores.
+
+### Assinatura da plataforma
+A HyperCash não tem API de recorrência, então o ciclo é nosso: cada cobrança
+confirmada libera 30 dias em `platform_subscriptions`, e `hypercash-renew-subscriptions`
+avisa antes do vencimento. `profiles.subscription_plan`/`subscription_status`
+continuam sendo o read model lido pelo app — `check-subscription` os sincroniza.
 
 ---
 
@@ -289,8 +300,11 @@ Sempre exibir com `FormMessage` do shadcn/ui — nunca `console.log` de erros si
 | `VITE_SUPABASE_PUBLISHABLE_KEY` | Cliente Supabase (chave anon) |
 | `VITE_SUPABASE_PROJECT_ID` | Geração de tipos, CLI |
 | `VITE_CLARITY_PROJECT_ID` | Microsoft Clarity — gravação de sessão e heatmaps do cardápio do cliente (agrupado por restaurante via custom tags) |
+| `VITE_HYPERCASH_PUBLIC_KEY` | SDK FastSoft — tokenização do cartão da assinatura no browser (`pk_live_…`) |
 
-Prefixo `VITE_` obrigatório para qualquer variável acessível no frontend (exposta ao browser). Segredos (Stripe secret key, API keys de terceiros) ficam **apenas** nas Edge Functions como secrets do Supabase, nunca no `.env` do frontend.
+Prefixo `VITE_` obrigatório para qualquer variável acessível no frontend (exposta ao browser). Segredos (chave secreta de gateway, API keys de terceiros) ficam **apenas** nas Edge Functions como secrets do Supabase, nunca no `.env` do frontend.
+
+Secrets de billing nas Edge Functions: `HYPERCASH_SECRET_KEY` (`sk_…`), `HYPERCASH_WEBHOOK_TOKEN` (token do `postbackUrl`) e `HYPERCASH_CARD_ON_FILE` (`true` só quando a HyperCash confirmar cobrança recorrente — ver `hypercash-renew-subscriptions`).
 
 ---
 

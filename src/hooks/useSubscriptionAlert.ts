@@ -59,15 +59,14 @@ export function useSubscriptionAlert(userId: string | undefined): SubscriptionAl
         const diffMs = endDate.getTime() - now.getTime();
         const daysRemaining = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
 
-        // Show alert logic:
-        // - Trial: always show banner (we want them to convert)
-        // - PIX (send_invoice): always show because it doesn't auto-renew
-        // - Card (charge_automatically): only show if cancelled (cancel_at_period_end = true)
-        const isPix = result.collection_method === "send_invoice";
-        const isCancelled = result.cancel_at_period_end === true;
+        // Toda assinatura agora é um ciclo de 30 dias que não se renova sozinho
+        // (a HyperCash não tem cobrança recorrente e o PIX é avulso), então o
+        // aviso de vencimento vale para todo mundo:
+        // - Trial: sempre, para converter
+        // - Assinatura paga: na última semana do ciclo
         const shouldShow = isTrial
           ? daysRemaining >= 0
-          : (isPix || isCancelled) && daysRemaining <= 7 && daysRemaining >= 0;
+          : daysRemaining <= 7 && daysRemaining >= 0;
 
         setData({
           showAlert: shouldShow,
