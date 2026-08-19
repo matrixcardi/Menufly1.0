@@ -478,7 +478,8 @@ export default function MasterAccounts() {
     }
   };
 
-
+  // Reconcilia a base legada do Stripe. Roda por cron diário; este botão serve
+  // para forçar a passada fora do horário (ex.: depois de mexer no dashboard).
   const syncStripe = async () => {
     setSyncing(true);
     try {
@@ -486,7 +487,7 @@ export default function MasterAccounts() {
       if (error) throw error;
       toast({
         title: "Sincronização concluída",
-        description: `${data?.updated ?? 0} conta(s) atualizadas a partir do Stripe.`,
+        description: `${data?.updated ?? 0} assinatura(s) legada(s) atualizada(s), ${data?.canceled ?? 0} encerrada(s).`,
       });
       await fetchAccounts();
     } catch (err: any) {
@@ -508,7 +509,7 @@ export default function MasterAccounts() {
         <div className="mt-3">
           <Button onClick={syncStripe} disabled={syncing} variant="outline" size="sm">
             {syncing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-2" />}
-            Sincronizar pagamentos Stripe
+            Sincronizar assinantes legados (Stripe)
           </Button>
         </div>
       </div>

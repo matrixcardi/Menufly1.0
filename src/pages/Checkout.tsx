@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -9,18 +9,14 @@ import {
   CreditCard, X, Rocket, QrCode,
 } from "lucide-react";
 import { motion } from "framer-motion";
+import { toast } from "sonner";
 import { Switch } from "@/components/ui/switch";
 import logoLight from "@/assets/logo-light.png";
 import checkoutBanner from "@/assets/checkout-banner.jpg";
 import { cn } from "@/lib/utils";
-import { toast } from "sonner";
-import { loadStripe } from "@stripe/stripe-js";
 import CheckoutAuthForm from "@/components/checkout/CheckoutAuthForm";
 import { SubscriptionPixDrawer } from "@/components/checkout/SubscriptionPixDrawer";
-import {
-  EmbeddedCheckoutProvider,
-  EmbeddedCheckout,
-} from "@stripe/react-stripe-js";
+import HyperCashCardForm from "@/components/checkout/HyperCashCardForm";
 
 type PlanType = "start" | "elite";
 type PaymentMethodType = "card" | "pix";
@@ -70,21 +66,28 @@ const highlights = [
   { icon: Clock, title: "Suporte I.A e Humanizado", description: "I.A 24h e atendimento humano seg-sex, 10h às 19h" },
 ];
 
+// Order bump. Precisa bater com IMPLEMENTATION_PRICE_CENTS em
+// supabase/functions/_shared/hypercash.ts e com o valor em create-pix-subscription.
+const IMPLEMENTATION_PRICE_CENTS = 39990;
+
+const formatBRL = (cents: number) =>
+  (cents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
 export default function Checkout() {
   const navigate = useNavigate();
   const [selectedPlan, setSelectedPlan] = useState<PlanType>("start");
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethodType>("card");
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
-  const [checkoutData, setCheckoutData] = useState<{ clientSecret: string; stripePromise: ReturnType<typeof loadStripe> } | null>(null);
-  const [checkoutLoading, setCheckoutLoading] = useState(false);
-  const [checkoutError, setCheckoutError] = useState<string | null>(null);
   const [includeImplementation, setIncludeImplementation] = useState(false);
   const [pixLoading, setPixLoading] = useState(false);
   const [pixDrawerOpen, setPixDrawerOpen] = useState(false);
-  const checkoutRef = useRef<HTMLDivElement>(null);
-  const loadedPlanRef = useRef<PlanType | null>(null);
+  const [legacyStripe, setLegacyStripe] = useState<boolean | null>(null);
+  const [portalLoading, setPortalLoading] = useState(false);
 
   const plan = plans[selectedPlan];
+
+  // A HyperCash trabalha em centavos.
+  const amountCents = plan.price * 100 + (includeImplementation ? IMPLEMENTATION_PRICE_CENTS : 0);
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -93,73 +96,52 @@ export default function Checkout() {
     return () => subscription.unsubscribe();
   }, []);
 
-  const loadCheckout = useCallback(async (planToLoad: PlanType, withImplementation: boolean) => {
-    if (!isAuthenticated) return;
+  // Clientes da base antiga continuam sendo cobrados pelo Stripe, que é
+  // recorrente. Se um deles assinasse aqui, passaria a pagar nos dois gateways
+  // ao mesmo tempo — então o formulário de pagamento não é oferecido a eles.
+  useEffect(() => {
+    if (isAuthenticated !== true) return;
 
-    setCheckoutLoading(true);
-    setCheckoutError(null);
-    setCheckoutData(null);
-    loadedPlanRef.current = null;
+    let cancelled = false;
+    supabase.functions.invoke("check-subscription").then(({ data }) => {
+      if (cancelled) return;
+      setLegacyStripe(data?.gateway === "stripe" && data?.subscribed === true);
+    }).catch(() => {
+      // Sem resposta não dá para afirmar que é legado; segue o fluxo normal.
+      if (!cancelled) setLegacyStripe(false);
+    });
 
-    try {
-      const { data, error } = await supabase.functions.invoke("create-checkout", {
-        body: { plan: planToLoad, includeImplementation: withImplementation },
-      });
-
-      if (error) throw error;
-      if (!data?.clientSecret || !data?.publishableKey) {
-        throw new Error("Dados do checkout não retornados");
-      }
-
-      const stripePromise = loadStripe(data.publishableKey);
-      setCheckoutData({ clientSecret: data.clientSecret, stripePromise });
-      loadedPlanRef.current = planToLoad;
-
-      setTimeout(() => {
-        checkoutRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-      }, 300);
-    } catch (err: any) {
-      console.error("Checkout error:", err);
-      setCheckoutError(err.message || "Erro ao carregar checkout.");
-      toast.error(err.message || "Erro ao iniciar checkout. Tente novamente.");
-    } finally {
-      setCheckoutLoading(false);
-    }
+    return () => { cancelled = true; };
   }, [isAuthenticated]);
 
-  // Auto-load checkout when authenticated (card only)
-  useEffect(() => {
-    if (isAuthenticated === true && paymentMethod === "card") {
-      loadCheckout(selectedPlan, includeImplementation);
+  const handleOpenPortal = async () => {
+    setPortalLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("customer-portal");
+      if (error) throw error;
+      if (data?.url) window.location.href = data.url;
+      else throw new Error(data?.message || "Não foi possível abrir o portal.");
+    } catch {
+      toast.error("Não foi possível abrir o portal de cobrança. Fale com o suporte.");
+    } finally {
+      setPortalLoading(false);
     }
-  }, [isAuthenticated, loadCheckout, paymentMethod]);
+  };
 
-  // Reload checkout when plan changes
+  // O formulário da HyperCash é montado no cliente e lê plano/valor direto do
+  // estado — não há mais sessão a recarregar no servidor a cada mudança.
   const handlePlanChange = (newPlan: PlanType) => {
     if (newPlan === selectedPlan) return;
     setSelectedPlan(newPlan);
-    if (isAuthenticated && paymentMethod === "card") {
-      loadCheckout(newPlan, includeImplementation);
-    }
   };
 
   const handleImplementationToggle = (checked: boolean) => {
     setIncludeImplementation(checked);
-    if (isAuthenticated && paymentMethod === "card") {
-      loadCheckout(selectedPlan, checked);
-    }
   };
 
   const handlePaymentMethodChange = (method: PaymentMethodType) => {
     if (method === paymentMethod) return;
     setPaymentMethod(method);
-    if (method === "card" && isAuthenticated) {
-      loadCheckout(selectedPlan, includeImplementation);
-    } else {
-      // Clear embedded checkout when switching to PIX
-      setCheckoutData(null);
-      setCheckoutError(null);
-    }
   };
 
   const handlePixCheckout = async () => {
@@ -306,7 +288,7 @@ export default function Checkout() {
                     Nossa equipe configura todo o seu cardápio, categorias, produtos, fotos e integração com WhatsApp para você começar a vender imediatamente. <span className="font-semibold text-foreground">+ Call prioritária com nosso time</span> para ensinar todas as funcionalidades na prática do sistema.
                   </p>
                   <div className="flex items-baseline gap-1">
-                    <span className="text-lg font-bold">R$ 399,90</span>
+                    <span className="text-lg font-bold">{formatBRL(IMPLEMENTATION_PRICE_CENTS)}</span>
                     <span className="text-xs text-muted-foreground">único</span>
                   </div>
                 </div>
@@ -323,15 +305,48 @@ export default function Checkout() {
         {/* Inline Checkout + Highlights */}
         <div className="grid lg:grid-cols-2 gap-6 max-w-6xl mx-auto">
           {/* Checkout section */}
-          <motion.div ref={checkoutRef} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }} className="order-1 scroll-mt-20">
+          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }} className="order-1 scroll-mt-20">
             <div className="bg-card border rounded-2xl overflow-hidden">
               <div className="p-5 border-b">
-                <h2 className="text-lg font-semibold">Finalizar Assinatura</h2>
+                <h2 className="text-lg font-semibold">
+                  {legacyStripe ? "Você já tem uma assinatura ativa" : "Finalizar Assinatura"}
+                </h2>
                 <p className="text-sm text-muted-foreground mt-1">
-                  {plan.name} — R$ {plan.price},00/mês · Pagamento seguro
+                  {legacyStripe
+                    ? "Sua cobrança é feita automaticamente no cartão cadastrado"
+                    : `${plan.name} — R$ ${plan.price},00/mês · Pagamento seguro`}
                 </p>
               </div>
 
+              {/* Assinante legado: cobrado pelo Stripe com renovação automática.
+                  Pagar aqui criaria uma segunda cobrança em paralelo, então o
+                  caminho é o portal, não o formulário. */}
+              {legacyStripe ? (
+                <div className="p-5 space-y-4">
+                  <div className="flex items-start gap-3 p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
+                    <CheckCircle className="w-5 h-5 text-emerald-600 mt-0.5 shrink-0" />
+                    <div className="space-y-1">
+                      <p className="font-medium text-emerald-700 dark:text-emerald-400">
+                        Assinatura ativa com renovação automática
+                      </p>
+                      <p className="text-sm text-emerald-600 dark:text-emerald-500">
+                        Não é preciso pagar de novo. Para trocar de plano, atualizar o cartão ou
+                        cancelar, use o portal de cobrança.
+                      </p>
+                    </div>
+                  </div>
+
+                  <Button className="w-full h-12 rounded-xl gap-2" onClick={handleOpenPortal} disabled={portalLoading}>
+                    {portalLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <CreditCard className="w-4 h-4" />}
+                    Gerenciar minha assinatura
+                  </Button>
+
+                  <Button variant="outline" className="w-full rounded-xl" onClick={() => navigate("/admin")}>
+                    Voltar ao painel
+                  </Button>
+                </div>
+              ) : (
+              <>
               {/* Payment method selector */}
               <div className="p-5 border-b">
                 <p className="text-sm font-medium mb-3">Forma de pagamento</p>
@@ -369,34 +384,15 @@ export default function Checkout() {
               </div>
 
               <div className="p-5 min-h-[420px]">
-                {/* Card: Loading checkout */}
-                {paymentMethod === "card" && checkoutLoading && (
-                  <div className="flex flex-col items-center justify-center py-12 gap-3">
-                    <Loader2 className="w-6 h-6 animate-spin text-primary" />
-                    <p className="text-sm text-muted-foreground">Carregando formulário de pagamento...</p>
-                  </div>
-                )}
-
-                {/* Card: Checkout error */}
-                {paymentMethod === "card" && checkoutError && !checkoutLoading && (
-                  <div className="text-center py-8 space-y-4">
-                    <p className="text-sm text-destructive">{checkoutError}</p>
-                    <Button variant="outline" onClick={() => loadCheckout(selectedPlan, includeImplementation)} className="rounded-xl">
-                      Tentar novamente
-                    </Button>
-                  </div>
-                )}
-
-                {/* Card: Embedded Stripe Checkout */}
-                {paymentMethod === "card" && checkoutData && !checkoutLoading && (
-                  <div className="rounded-xl">
-                    <EmbeddedCheckoutProvider
-                      stripe={checkoutData.stripePromise}
-                      options={{ clientSecret: checkoutData.clientSecret }}
-                    >
-                      <EmbeddedCheckout />
-                    </EmbeddedCheckoutProvider>
-                  </div>
+                {/* Card: HyperCash */}
+                {paymentMethod === "card" && (
+                  <HyperCashCardForm
+                    plan={selectedPlan}
+                    planLabel={plan.name}
+                    amountCents={amountCents}
+                    includeImplementation={includeImplementation}
+                    onActivated={() => navigate("/admin")}
+                  />
                 )}
 
                 {/* PIX: Checkout button */}
@@ -409,7 +405,7 @@ export default function Checkout() {
                       <p className="font-semibold">{plan.name}</p>
                       <p className="text-2xl font-bold mt-1">R$ {plan.price},00</p>
                       {includeImplementation && (
-                        <p className="text-sm text-muted-foreground">+ R$ 399,90 (Implementação)</p>
+                        <p className="text-sm text-muted-foreground">+ {formatBRL(IMPLEMENTATION_PRICE_CENTS)} (Implementação)</p>
                       )}
                     </div>
                     <Button
@@ -438,9 +434,11 @@ export default function Checkout() {
 
                 <p className="text-xs text-center text-muted-foreground mt-4">
                   <Shield className="w-3 h-3 inline mr-1" />
-                  Pagamento processado de forma segura pelo Stripe. Cancele quando quiser.
+                  Pagamento processado de forma segura. Cancele quando quiser.
                 </p>
               </div>
+              </>
+              )}
             </div>
           </motion.div>
 

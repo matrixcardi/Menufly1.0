@@ -11,7 +11,27 @@ additional_redirect_urls = [
 [functions.check-subscription]
 verify_jwt = false
 
-[functions.create-checkout]
+# Billing da plataforma (HyperCash). As funções abaixo validam o JWT do usuário
+# manualmente; o webhook é chamado pela HyperCash e se autentica pelo token da
+# query + reconsulta da transação na origem.
+[functions.hypercash-create-transaction]
+verify_jwt = false
+
+[functions.hypercash-verify-transaction]
+verify_jwt = false
+
+[functions.hypercash-webhook]
+verify_jwt = false
+
+[functions.hypercash-renew-subscriptions]
+verify_jwt = true
+
+# Base legada do Stripe: somente leitura e gestão. Nenhuma assinatura nova é
+# criada aqui — clientes novos entram pela HyperCash.
+[functions.customer-portal]
+verify_jwt = false
+
+[functions.sync-stripe-subscriptions]
 verify_jwt = false
 
 [functions.seed-master-users]
@@ -69,9 +89,6 @@ verify_jwt = true
 verify_jwt = false
 
 [functions.handle-email-suppression]
-verify_jwt = false
-
-[functions.purchase-whatsapp-credits]
 verify_jwt = false
 
 [functions.confirm-whatsapp-credits]

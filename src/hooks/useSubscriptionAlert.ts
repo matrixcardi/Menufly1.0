@@ -59,15 +59,21 @@ export function useSubscriptionAlert(userId: string | undefined): SubscriptionAl
         const diffMs = endDate.getTime() - now.getTime();
         const daysRemaining = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
 
-        // Show alert logic:
-        // - Trial: always show banner (we want them to convert)
-        // - PIX (send_invoice): always show because it doesn't auto-renew
-        // - Card (charge_automatically): only show if cancelled (cancel_at_period_end = true)
-        const isPix = result.collection_method === "send_invoice";
-        const isCancelled = result.cancel_at_period_end === true;
+        // O aviso depende de quem renova a assinatura:
+        // - Trial: sempre, para converter
+        // - HyperCash / PIX: ciclos avulsos, ninguém renova pelo cliente, então
+        //   avisa na última semana
+        // - Stripe (base legada): a cobrança é automática. Avisar aqui só
+        //   assustaria quem não precisa fazer nada — o alerta fica reservado a
+        //   quem já pediu cancelamento e vai perder o acesso no fim do ciclo.
+        const isLegacyStripe = result.gateway === "stripe";
+        const expiringWindow = daysRemaining <= 7 && daysRemaining >= 0;
+
         const shouldShow = isTrial
           ? daysRemaining >= 0
-          : (isPix || isCancelled) && daysRemaining <= 7 && daysRemaining >= 0;
+          : isLegacyStripe
+            ? result.cancel_at_period_end === true && expiringWindow
+            : expiringWindow;
 
         setData({
           showAlert: shouldShow,

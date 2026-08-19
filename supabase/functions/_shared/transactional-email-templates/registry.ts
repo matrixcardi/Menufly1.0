@@ -11,8 +11,10 @@ export interface TemplateEntry {
 
 import { template as welcomeMenufly } from './welcome-menufly.tsx'
 import { template as trialReminder } from './trial-reminder.tsx'
+import { template as subscriptionRenewal } from './subscription-renewal.tsx'
 
 export const TEMPLATES: Record<string, TemplateEntry> = {
   'welcome-menufly': welcomeMenufly,
   'trial-reminder': trialReminder,
+  'subscription-renewal': subscriptionRenewal,
 }

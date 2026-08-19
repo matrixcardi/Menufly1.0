@@ -218,15 +218,52 @@ Roles disponíveis: `owner`, `manager`, `cashier`, `kitchen`, `delivery`. Verifi
 ### Gateways suportados
 | Gateway | Uso |
 |---|---|
-| Stripe | Cartão de crédito (assinaturas plataforma) |
-| Mercado Pago | Cartão + PIX (restaurantes brasileiros) |
+| HyperCash | Cartão da assinatura — **todo cliente novo** |
+| Stripe | Cartão da assinatura — **apenas a base legada**, somente leitura/gestão |
+| Mercado Pago | PIX da assinatura + cartão/PIX dos pedidos dos restaurantes |
 | PIX direto | Pagamento manual confirmado pelo admin |
 
 ### Regra de ouro
 **Nunca processar pagamento no frontend.** Todo processamento passa por Edge Functions:
-- `supabase/functions/create-checkout/` — Stripe
-- `supabase/functions/generate-pix/` — PIX
-- `supabase/functions/process-card-payment/` — cartão MP
+- `supabase/functions/hypercash-create-transaction/` — cartão da assinatura
+- `supabase/functions/create-pix-subscription/` — PIX da assinatura
+- `supabase/functions/generate-pix/` — PIX de pedido
+- `supabase/functions/process-card-payment/` — cartão de pedido (MP)
+
+Exceção: o número do cartão da assinatura é tokenizado **no browser** pelo SDK da
+HyperCash (`FastSoft.encrypt`) e só o token trafega até a Edge Function — o dado
+sensível nunca toca nossos servidores.
+
+### Assinatura da plataforma — dois gateways convivendo
+
+`platform_subscriptions.gateway` diz quem cobra cada cliente, e o comportamento
+muda por completo entre os dois:
+
+| | `stripe` (legado) | `hypercash` / `mercadopago` |
+|---|---|---|
+| Cobrança | Recorrente automática | Avulsa, 30 dias por pagamento |
+| Fim do ciclo | Renova sozinho | Exige ação do cliente |
+| Gestão | Portal (`customer-portal`) | "Renovar agora" → `/checkout` |
+| Aviso de vencimento | Só se `cancel_at_period_end` | Sempre, nos últimos 7 dias |
+
+**Regra inviolável: nenhuma assinatura Stripe nova é criada.** Não existe
+`create-checkout`; o Stripe só é lido, gerenciado e sincronizado. Todo cliente
+novo — e todo legado que cancelar e voltar — entra pela HyperCash, então a base
+Stripe só encolhe.
+
+Consequências práticas ao mexer nesta área:
+- `hypercash-renew-subscriptions` filtra `gateway IN ('hypercash','mercadopago')`.
+  Mandar "renove agora" para quem tem débito automático gera cancelamento.
+- `check-subscription` não rebaixa linha `gateway='stripe'` vencida sem
+  confirmar ao vivo no Stripe — o cron de sync pode estar atrasado e o corte
+  tiraria acesso de quem acabou de ser cobrado.
+- `/checkout` e `hypercash-create-transaction` recusam quem tem Stripe ativo,
+  senão o cliente passa a pagar nos dois gateways ao mesmo tempo.
+- `sync-stripe-subscriptions` (cron diário) é o que mantém a flag confiável, e
+  precisa tratar assinatura **ausente** da listagem como cancelamento.
+
+`profiles.subscription_plan`/`subscription_status` continuam sendo o read model
+lido pelo app — `check-subscription` e o sync os mantêm em dia.
 
 ---
 
@@ -289,8 +326,13 @@ Sempre exibir com `FormMessage` do shadcn/ui — nunca `console.log` de erros si
 | `VITE_SUPABASE_PUBLISHABLE_KEY` | Cliente Supabase (chave anon) |
 | `VITE_SUPABASE_PROJECT_ID` | Geração de tipos, CLI |
 | `VITE_CLARITY_PROJECT_ID` | Microsoft Clarity — gravação de sessão e heatmaps do cardápio do cliente (agrupado por restaurante via custom tags) |
+| `VITE_HYPERCASH_PUBLIC_KEY` | SDK FastSoft — tokenização do cartão da assinatura no browser (`pk_live_…`) |
 
-Prefixo `VITE_` obrigatório para qualquer variável acessível no frontend (exposta ao browser). Segredos (Stripe secret key, API keys de terceiros) ficam **apenas** nas Edge Functions como secrets do Supabase, nunca no `.env` do frontend.
+Prefixo `VITE_` obrigatório para qualquer variável acessível no frontend (exposta ao browser). Segredos (chave secreta de gateway, API keys de terceiros) ficam **apenas** nas Edge Functions como secrets do Supabase, nunca no `.env` do frontend.
+
+Secrets de billing nas Edge Functions: `HYPERCASH_SECRET_KEY` (`sk_…`), `HYPERCASH_WEBHOOK_TOKEN` (token do `postbackUrl`), `HYPERCASH_CARD_ON_FILE` (`true` só quando a HyperCash confirmar cobrança recorrente — ver `hypercash-renew-subscriptions`) e `STRIPE_SECRET_KEY` (base legada: portal, sync e verificação pontual).
+
+Não existe `VITE_STRIPE_PUBLISHABLE_KEY`: ela só servia ao Embedded Checkout, que saiu junto com a criação de assinaturas Stripe. Por isso `@stripe/stripe-js` e `@stripe/react-stripe-js` também não são mais dependências do frontend — o Stripe vive apenas no SDK Deno das Edge Functions.
 
 ---
 
