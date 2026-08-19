@@ -9,6 +9,7 @@ import {
   CreditCard, X, Rocket, QrCode,
 } from "lucide-react";
 import { motion } from "framer-motion";
+import { toast } from "sonner";
 import { Switch } from "@/components/ui/switch";
 import logoLight from "@/assets/logo-light.png";
 import checkoutBanner from "@/assets/checkout-banner.jpg";
@@ -80,6 +81,8 @@ export default function Checkout() {
   const [includeImplementation, setIncludeImplementation] = useState(false);
   const [pixLoading, setPixLoading] = useState(false);
   const [pixDrawerOpen, setPixDrawerOpen] = useState(false);
+  const [legacyStripe, setLegacyStripe] = useState<boolean | null>(null);
+  const [portalLoading, setPortalLoading] = useState(false);
 
   const plan = plans[selectedPlan];
 
@@ -92,6 +95,38 @@ export default function Checkout() {
     });
     return () => subscription.unsubscribe();
   }, []);
+
+  // Clientes da base antiga continuam sendo cobrados pelo Stripe, que é
+  // recorrente. Se um deles assinasse aqui, passaria a pagar nos dois gateways
+  // ao mesmo tempo — então o formulário de pagamento não é oferecido a eles.
+  useEffect(() => {
+    if (isAuthenticated !== true) return;
+
+    let cancelled = false;
+    supabase.functions.invoke("check-subscription").then(({ data }) => {
+      if (cancelled) return;
+      setLegacyStripe(data?.gateway === "stripe" && data?.subscribed === true);
+    }).catch(() => {
+      // Sem resposta não dá para afirmar que é legado; segue o fluxo normal.
+      if (!cancelled) setLegacyStripe(false);
+    });
+
+    return () => { cancelled = true; };
+  }, [isAuthenticated]);
+
+  const handleOpenPortal = async () => {
+    setPortalLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("customer-portal");
+      if (error) throw error;
+      if (data?.url) window.location.href = data.url;
+      else throw new Error(data?.message || "Não foi possível abrir o portal.");
+    } catch {
+      toast.error("Não foi possível abrir o portal de cobrança. Fale com o suporte.");
+    } finally {
+      setPortalLoading(false);
+    }
+  };
 
   // O formulário da HyperCash é montado no cliente e lê plano/valor direto do
   // estado — não há mais sessão a recarregar no servidor a cada mudança.
@@ -273,12 +308,45 @@ export default function Checkout() {
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }} className="order-1 scroll-mt-20">
             <div className="bg-card border rounded-2xl overflow-hidden">
               <div className="p-5 border-b">
-                <h2 className="text-lg font-semibold">Finalizar Assinatura</h2>
+                <h2 className="text-lg font-semibold">
+                  {legacyStripe ? "Você já tem uma assinatura ativa" : "Finalizar Assinatura"}
+                </h2>
                 <p className="text-sm text-muted-foreground mt-1">
-                  {plan.name} — R$ {plan.price},00/mês · Pagamento seguro
+                  {legacyStripe
+                    ? "Sua cobrança é feita automaticamente no cartão cadastrado"
+                    : `${plan.name} — R$ ${plan.price},00/mês · Pagamento seguro`}
                 </p>
               </div>
 
+              {/* Assinante legado: cobrado pelo Stripe com renovação automática.
+                  Pagar aqui criaria uma segunda cobrança em paralelo, então o
+                  caminho é o portal, não o formulário. */}
+              {legacyStripe ? (
+                <div className="p-5 space-y-4">
+                  <div className="flex items-start gap-3 p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
+                    <CheckCircle className="w-5 h-5 text-emerald-600 mt-0.5 shrink-0" />
+                    <div className="space-y-1">
+                      <p className="font-medium text-emerald-700 dark:text-emerald-400">
+                        Assinatura ativa com renovação automática
+                      </p>
+                      <p className="text-sm text-emerald-600 dark:text-emerald-500">
+                        Não é preciso pagar de novo. Para trocar de plano, atualizar o cartão ou
+                        cancelar, use o portal de cobrança.
+                      </p>
+                    </div>
+                  </div>
+
+                  <Button className="w-full h-12 rounded-xl gap-2" onClick={handleOpenPortal} disabled={portalLoading}>
+                    {portalLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <CreditCard className="w-4 h-4" />}
+                    Gerenciar minha assinatura
+                  </Button>
+
+                  <Button variant="outline" className="w-full rounded-xl" onClick={() => navigate("/admin")}>
+                    Voltar ao painel
+                  </Button>
+                </div>
+              ) : (
+              <>
               {/* Payment method selector */}
               <div className="p-5 border-b">
                 <p className="text-sm font-medium mb-3">Forma de pagamento</p>
@@ -369,6 +437,8 @@ export default function Checkout() {
                   Pagamento processado de forma segura. Cancele quando quiser.
                 </p>
               </div>
+              </>
+              )}
             </div>
           </motion.div>
 

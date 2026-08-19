@@ -7,7 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import {
   RefreshCw, Crown, Zap, AlertTriangle, CheckCircle2, Clock, XCircle,
-  MessageCircle, ArrowRightLeft, CreditCard,
+  MessageCircle, ArrowRightLeft, CreditCard, Loader2,
 } from "lucide-react";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -23,12 +23,14 @@ interface SubscriptionData {
   status: string | null;
   gateway: string | null;
   auto_renew: boolean;
+  cancel_at_period_end: boolean;
 }
 
 export default function AdminSubscription() {
   const [data, setData] = useState<SubscriptionData | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [portalLoading, setPortalLoading] = useState(false);
   const { toast } = useToast();
 
   const fetchSubscription = useCallback(async () => {
@@ -50,6 +52,33 @@ export default function AdminSubscription() {
   const handleRefresh = () => { setRefreshing(true); fetchSubscription(); };
 
   const goToCheckout = () => { window.location.href = "/checkout"; };
+
+  // Só a base legada tem portal — clientes HyperCash gerenciam tudo por aqui.
+  const handleOpenPortal = async () => {
+    setPortalLoading(true);
+    try {
+      const { data: result, error } = await supabase.functions.invoke("customer-portal");
+      if (error) throw error;
+      if (result?.error === "no_subscription") {
+        toast({
+          title: "Nenhuma assinatura encontrada",
+          description: result.message,
+          variant: "destructive",
+        });
+        return;
+      }
+      if (!result?.url) throw new Error("URL do portal não retornada");
+      window.location.href = result.url;
+    } catch {
+      toast({
+        title: "Não foi possível abrir o portal",
+        description: "Tente novamente ou fale com o suporte.",
+        variant: "destructive",
+      });
+    } finally {
+      setPortalLoading(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -76,7 +105,13 @@ export default function AdminSubscription() {
 
   const planLabel = activePlan === "elite" ? "Elite" : activePlan === "start" ? "Start" : "Ativo";
   const statusLabel = isTrial ? "Trial" : isSubscribed ? "Ativo" : "Inativo";
-  const expiringSoon = daysRemaining !== null && daysRemaining <= 7;
+
+  // Base legada: cobrada pelo Stripe, com renovação automática. Não faz sentido
+  // avisar de vencimento nem oferecer "renovar" — a cobrança acontece sozinha.
+  const isLegacyStripe = data?.gateway === "stripe" && !isTrial;
+  const willCancel = isLegacyStripe && data?.cancel_at_period_end === true;
+  const expiringSoon = daysRemaining !== null && daysRemaining <= 7
+    && (!isLegacyStripe || willCancel);
 
   return (
     <div className="p-6 md:p-10 max-w-4xl mx-auto space-y-6">
@@ -106,9 +141,13 @@ export default function AdminSubscription() {
                   {isTrial ? "Período de Teste" : isSubscribed ? `Plano ${planLabel}` : "Sem Assinatura"}
                 </CardTitle>
                 <CardDescription>
-                  {isSubscribed
-                    ? isTrial ? "Aproveite para testar todos os recursos" : "Renovação mensal"
-                    : "Você não possui um plano ativo"}
+                  {!isSubscribed
+                    ? "Você não possui um plano ativo"
+                    : isTrial
+                      ? "Aproveite para testar todos os recursos"
+                      : isLegacyStripe
+                        ? willCancel ? "Cancelamento agendado para o fim do ciclo" : "Renovação automática mensal"
+                        : "Renovação mensal"}
                 </CardDescription>
               </div>
             </div>
@@ -125,12 +164,16 @@ export default function AdminSubscription() {
               <AlertTriangle className="w-5 h-5 text-amber-600 mt-0.5 shrink-0" />
               <div>
                 <p className="font-medium text-amber-700 dark:text-amber-400">
-                  {isTrial ? "Seu teste está acabando" : "Sua assinatura vence em breve"}
+                  {isTrial
+                    ? "Seu teste está acabando"
+                    : willCancel ? "Sua assinatura será encerrada" : "Sua assinatura vence em breve"}
                 </p>
                 <p className="text-sm text-amber-600 dark:text-amber-500">
                   {isTrial
                     ? `Assine até ${formattedEnd} para não perder o acesso.`
-                    : `Renove até ${formattedEnd} para manter o acesso aos recursos.`}
+                    : willCancel
+                      ? `O cancelamento está agendado para ${formattedEnd}. Reative pelo portal para manter o acesso.`
+                      : `Renove até ${formattedEnd} para manter o acesso aos recursos.`}
                 </p>
               </div>
             </div>
@@ -141,7 +184,9 @@ export default function AdminSubscription() {
               <div>
                 <p className="font-medium text-emerald-700 dark:text-emerald-400">Acesso liberado</p>
                 <p className="text-sm text-emerald-600 dark:text-emerald-500">
-                  Seu plano está ativo até {formattedEnd}.
+                  {isLegacyStripe
+                    ? `Próxima cobrança automática em ${formattedEnd}.`
+                    : `Seu plano está ativo até ${formattedEnd}.`}
                 </p>
               </div>
             </div>
@@ -171,7 +216,9 @@ export default function AdminSubscription() {
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">
-                    {isTrial ? "Teste termina em" : "Vence em"}
+                    {isTrial
+                      ? "Teste termina em"
+                      : isLegacyStripe && !willCancel ? "Próxima cobrança" : "Vence em"}
                   </p>
                   <p className="font-semibold">{formattedEnd}</p>
                 </div>
@@ -203,17 +250,38 @@ export default function AdminSubscription() {
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">Renovação</p>
-                  <p className="font-semibold">Cartão ou PIX</p>
+                  <p className="font-semibold">
+                    {isLegacyStripe ? "Automática no cartão" : "Cartão ou PIX"}
+                  </p>
                 </div>
               </div>
-              <p className="text-sm text-muted-foreground mb-4">
-                A renovação é feita a cada 30 dias. Você pode renovar a qualquer momento — os dias
-                restantes são somados ao novo período.
-              </p>
-              <Button className="w-full rounded-xl gap-2 mt-auto" onClick={goToCheckout}>
-                <Zap className="w-4 h-4" />
-                Renovar agora
-              </Button>
+              {isLegacyStripe ? (
+                <>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    Sua assinatura é renovada automaticamente no cartão cadastrado. Use o portal
+                    para trocar de plano, atualizar o cartão ou cancelar.
+                  </p>
+                  <Button
+                    className="w-full rounded-xl gap-2 mt-auto"
+                    onClick={handleOpenPortal}
+                    disabled={portalLoading}
+                  >
+                    {portalLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <CreditCard className="w-4 h-4" />}
+                    Gerenciar assinatura
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    A renovação é feita a cada 30 dias. Você pode renovar a qualquer momento — os dias
+                    restantes são somados ao novo período.
+                  </p>
+                  <Button className="w-full rounded-xl gap-2 mt-auto" onClick={goToCheckout}>
+                    <Zap className="w-4 h-4" />
+                    Renovar agora
+                  </Button>
+                </>
+              )}
             </CardContent>
           </Card>
         </div>
@@ -239,10 +307,13 @@ export default function AdminSubscription() {
       {/* Quick actions */}
       {isSubscribed && (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {/* Legado troca de plano dentro do Stripe; assinar aqui geraria uma
+              segunda cobrança em paralelo à recorrência existente. */}
           <Button
             variant="outline"
             className="rounded-xl h-auto py-4 flex flex-col items-center gap-2"
-            onClick={goToCheckout}
+            onClick={isLegacyStripe ? handleOpenPortal : goToCheckout}
+            disabled={isLegacyStripe && portalLoading}
           >
             <ArrowRightLeft className="w-5 h-5" />
             <span className="text-xs">Trocar de Plano</span>
@@ -260,19 +331,28 @@ export default function AdminSubscription() {
               <AlertDialogHeader>
                 <AlertDialogTitle>Cancelar assinatura?</AlertDialogTitle>
                 <AlertDialogDescription>
-                  Sua assinatura não renova sozinha — basta não renovar ao fim do período para
-                  encerrá-la. Se quiser cancelar agora ou tirar dúvidas, fale com nosso suporte
-                  pelo WhatsApp.
+                  {isLegacyStripe
+                    ? "Sua assinatura tem renovação automática. Você pode cancelá-la você mesmo pelo portal de cobrança — o acesso continua até o fim do período já pago."
+                    : "Sua assinatura não renova sozinha — basta não renovar ao fim do período para encerrá-la. Se quiser cancelar agora ou tirar dúvidas, fale com nosso suporte pelo WhatsApp."}
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
                 <AlertDialogCancel className="rounded-xl">Voltar</AlertDialogCancel>
-                <AlertDialogAction
-                  className="bg-destructive hover:bg-destructive/90 rounded-xl gap-2"
-                  onClick={() => window.open("https://wa.me/5551995135594?text=Olá, gostaria de cancelar minha assinatura do Menufly.", "_blank")}>
-                  <MessageCircle className="w-4 h-4" />
-                  Falar com suporte
-                </AlertDialogAction>
+                {isLegacyStripe ? (
+                  <AlertDialogAction
+                    className="bg-destructive hover:bg-destructive/90 rounded-xl gap-2"
+                    onClick={handleOpenPortal}>
+                    <CreditCard className="w-4 h-4" />
+                    Abrir portal de cobrança
+                  </AlertDialogAction>
+                ) : (
+                  <AlertDialogAction
+                    className="bg-destructive hover:bg-destructive/90 rounded-xl gap-2"
+                    onClick={() => window.open("https://wa.me/5551995135594?text=Olá, gostaria de cancelar minha assinatura do Menufly.", "_blank")}>
+                    <MessageCircle className="w-4 h-4" />
+                    Falar com suporte
+                  </AlertDialogAction>
+                )}
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>

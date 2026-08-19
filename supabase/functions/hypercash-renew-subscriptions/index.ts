@@ -48,9 +48,13 @@ serve(async (req) => {
     const now = Date.now();
     const horizon = new Date(now + 8 * 24 * 60 * 60 * 1000).toISOString();
 
+    // Apenas gateways de cobrança avulsa. Assinatura Stripe é recorrente: o
+    // gateway renova sozinho, e mandar "sua assinatura vence, renove agora"
+    // para quem tem débito automático assusta e gera cancelamento.
     const { data: subs, error } = await supabase
       .from("platform_subscriptions")
       .select("user_id, plan, status, gateway, current_period_end, auto_renew, renewal_attempts, last_renewal_notice_at, hypercash_customer_id")
+      .in("gateway", ["hypercash", "mercadopago"])
       .in("status", ["active", "past_due"])
       .lte("current_period_end", horizon);
 

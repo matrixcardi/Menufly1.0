@@ -26,6 +26,14 @@ verify_jwt = false
 [functions.hypercash-renew-subscriptions]
 verify_jwt = true
 
+# Base legada do Stripe: somente leitura e gestão. Nenhuma assinatura nova é
+# criada aqui — clientes novos entram pela HyperCash.
+[functions.customer-portal]
+verify_jwt = false
+
+[functions.sync-stripe-subscriptions]
+verify_jwt = false
+
 [functions.seed-master-users]
 verify_jwt = false
 

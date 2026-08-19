@@ -1,4 +1,9 @@
--- Billing da plataforma (assinatura MenuFly) — suporte a HyperCash
+-- Billing da plataforma (assinatura MenuFly) — Stripe e HyperCash convivendo
+--
+-- Clientes antigos continuam sendo cobrados pelo Stripe (recorrência automática);
+-- clientes novos entram pela HyperCash (ciclos avulsos de 30 dias). Nenhuma
+-- assinatura Stripe nova é criada — o gateway fica somente-leitura sobre a base
+-- existente e ela só encolhe.
 --
 -- `profiles.subscription_plan` / `subscription_status` continuam sendo o read model
 -- consumido pelo app (usePlan, useCurrentPlan, useSubscriptionPlan, MasterAccounts).
@@ -12,11 +17,20 @@ CREATE TABLE IF NOT EXISTS public.platform_subscriptions (
   user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   plan TEXT NOT NULL CHECK (plan IN ('start', 'elite', 'assessoria')),
   status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'past_due', 'canceled')),
-  gateway TEXT NOT NULL CHECK (gateway IN ('hypercash', 'mercadopago', 'stripe_legacy')),
+  gateway TEXT NOT NULL CHECK (gateway IN ('hypercash', 'mercadopago', 'stripe')),
   current_period_start TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
   current_period_end TIMESTAMP WITH TIME ZONE NOT NULL,
+  -- Stripe renova sozinho; HyperCash e PIX dependem de ação do cliente. É esta
+  -- diferença que decide quem recebe aviso de vencimento e quem não recebe.
   auto_renew BOOLEAN NOT NULL DEFAULT true,
+  -- Só faz sentido para gateway = 'stripe': assinatura marcada para encerrar no
+  -- fim do ciclo. É o único caso em que um cliente Stripe deve ver o banner.
+  cancel_at_period_end BOOLEAN NOT NULL DEFAULT false,
   hypercash_customer_id TEXT,
+  -- Vínculo explícito com o Stripe. O código antigo redescobria o cliente por
+  -- `customers.list({ email })` a cada chamada; guardar os ids elimina isso.
+  stripe_customer_id TEXT,
+  stripe_subscription_id TEXT,
   last_transaction_id TEXT,
   renewal_attempts INTEGER NOT NULL DEFAULT 0,
   last_renewal_notice_at TIMESTAMP WITH TIME ZONE,
@@ -27,8 +41,13 @@ CREATE TABLE IF NOT EXISTS public.platform_subscriptions (
 
 CREATE INDEX IF NOT EXISTS idx_platform_subscriptions_period_end
   ON public.platform_subscriptions (current_period_end);
+-- Sustenta a varredura do cron de renovação, que filtra por gateway.
 CREATE INDEX IF NOT EXISTS idx_platform_subscriptions_renewal
-  ON public.platform_subscriptions (status, auto_renew, current_period_end);
+  ON public.platform_subscriptions (gateway, status, auto_renew, current_period_end);
+-- O sync do Stripe reconcilia por customer id.
+CREATE INDEX IF NOT EXISTS idx_platform_subscriptions_stripe_customer
+  ON public.platform_subscriptions (stripe_customer_id)
+  WHERE stripe_customer_id IS NOT NULL;
 
 ALTER TABLE public.platform_subscriptions ENABLE ROW LEVEL SECURITY;
 
@@ -105,13 +124,19 @@ CREATE TRIGGER set_platform_transactions_updated_at
   FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
 
 -- ---------------------------------------------------------------------------
--- Backfill do cutover
+-- Backfill da base existente
 --
--- Assinantes ativos hoje (Stripe ou PIX) não podem perder acesso quando o
--- check-subscription parar de consultar o Stripe. Cada um recebe uma linha com
--- 30 dias de janela a partir de agora e `auto_renew = false`: o cron de
--- renovação vai notificá-los para migrar o pagamento para a HyperCash em vez
--- de tentar cobrar um cartão que não temos.
+-- Todo assinante ativo hoje é cobrado pelo Stripe ou pagou PIX, e nenhum pode
+-- perder acesso ao passar a depender desta tabela. Cada um ganha uma linha
+-- `gateway = 'stripe'` com `auto_renew = true`, porque assinatura Stripe renova
+-- sozinha.
+--
+-- `current_period_end` aqui é PROVISÓRIO: não sabemos a data real de renovação
+-- sem consultar o Stripe. Os 30 dias servem só para cobrir o intervalo até o
+-- primeiro `sync-stripe-subscriptions`, que sobrescreve com o valor verdadeiro
+-- junto de stripe_customer_id, stripe_subscription_id e cancel_at_period_end.
+--
+-- >>> Rodar `sync-stripe-subscriptions` logo depois de aplicar esta migração.
 -- ---------------------------------------------------------------------------
 INSERT INTO public.platform_subscriptions (
   user_id, plan, status, gateway, current_period_start, current_period_end, auto_renew
@@ -121,10 +146,10 @@ SELECT
   CASE WHEN p.subscription_plan IN ('start', 'elite', 'assessoria')
        THEN p.subscription_plan ELSE 'start' END,
   'active',
-  'stripe_legacy',
+  'stripe',
   now(),
   now() + INTERVAL '30 days',
-  false
+  true
 FROM public.profiles p
 WHERE p.subscription_status = 'active'
   AND p.subscription_plan IS NOT NULL
@@ -134,6 +159,8 @@ ON CONFLICT (user_id) DO NOTHING;
 COMMENT ON TABLE public.platform_subscriptions IS
   'Ciclo de cobrança da assinatura da plataforma. profiles.subscription_* continua sendo o read model do app.';
 COMMENT ON COLUMN public.platform_subscriptions.gateway IS
-  'stripe_legacy marca assinantes migrados no cutover, que ainda não pagaram pela HyperCash.';
+  'stripe = base legada com recorrência automática (nunca recebe assinatura nova). hypercash/mercadopago = ciclos avulsos de 30 dias.';
+COMMENT ON COLUMN public.platform_subscriptions.auto_renew IS
+  'Stripe: sempre true (o gateway renova). HyperCash/PIX: indica que o cliente deve ser avisado antes do vencimento.';
 COMMENT ON TABLE public.platform_transactions IS
   'Auditoria de cobranças da plataforma. UNIQUE(gateway, gateway_transaction_id) garante idempotência do webhook.';

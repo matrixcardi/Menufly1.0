@@ -72,6 +72,28 @@ serve(async (req) => {
     const documentNumber = String(customer.document).replace(/\D/g, "");
     if (documentNumber.length !== 11) throw new Error("CPF inválido");
 
+    // Backstop contra cobrança dupla. O /checkout já esconde o formulário de
+    // quem é da base legada, mas essa guarda depende do check-subscription ter
+    // respondido no browser. Cobrar duas vezes é irreversível do ponto de vista
+    // do cliente, então a recusa definitiva mora aqui.
+    const { data: existing } = await supabase
+      .from("platform_subscriptions")
+      .select("gateway, status, current_period_end")
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    if (
+      existing?.gateway === "stripe" &&
+      existing.status === "active" &&
+      new Date(existing.current_period_end).getTime() > Date.now()
+    ) {
+      logStep("Blocked: user has an active Stripe subscription", { userId: user.id });
+      return new Response(JSON.stringify({
+        error: "stripe_subscription_active",
+        message: "Você já possui uma assinatura ativa com renovação automática. Gerencie-a pelo portal de cobrança.",
+      }), { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 409 });
+    }
+
     // Assinatura é serviço: tangible = false e sem frete.
     const items = [{
       title: PLAN_LABELS[plan] ?? plan,

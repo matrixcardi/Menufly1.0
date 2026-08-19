@@ -59,14 +59,21 @@ export function useSubscriptionAlert(userId: string | undefined): SubscriptionAl
         const diffMs = endDate.getTime() - now.getTime();
         const daysRemaining = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
 
-        // Toda assinatura agora é um ciclo de 30 dias que não se renova sozinho
-        // (a HyperCash não tem cobrança recorrente e o PIX é avulso), então o
-        // aviso de vencimento vale para todo mundo:
+        // O aviso depende de quem renova a assinatura:
         // - Trial: sempre, para converter
-        // - Assinatura paga: na última semana do ciclo
+        // - HyperCash / PIX: ciclos avulsos, ninguém renova pelo cliente, então
+        //   avisa na última semana
+        // - Stripe (base legada): a cobrança é automática. Avisar aqui só
+        //   assustaria quem não precisa fazer nada — o alerta fica reservado a
+        //   quem já pediu cancelamento e vai perder o acesso no fim do ciclo.
+        const isLegacyStripe = result.gateway === "stripe";
+        const expiringWindow = daysRemaining <= 7 && daysRemaining >= 0;
+
         const shouldShow = isTrial
           ? daysRemaining >= 0
-          : daysRemaining <= 7 && daysRemaining >= 0;
+          : isLegacyStripe
+            ? result.cancel_at_period_end === true && expiringWindow
+            : expiringWindow;
 
         setData({
           showAlert: shouldShow,
