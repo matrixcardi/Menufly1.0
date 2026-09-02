@@ -9,6 +9,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { extractEdgeFunctionError } from "@/lib/edge-function-error";
+import { logger } from "@/lib/logger";
 
 interface Props {
   open: boolean;
@@ -101,17 +103,24 @@ export function SubscriptionPixDrawer({
           "hypercash-create-pix-subscription",
           { body: { plan, includeImplementation } }
         );
-        if (fnError) throw new Error(fnError.message || "Erro ao gerar PIX");
+        if (fnError) {
+          const detail = await extractEdgeFunctionError(fnError, "Erro ao gerar PIX");
+          logger.error("Falha ao gerar PIX da assinatura", { detail, plan });
+          throw new Error(detail);
+        }
         if (data?.success && data?.qr_code && data?.payment_id) {
           setPixCode(data.qr_code);
           setQrImageBase64(data.qr_code_base64 || null);
           setPaymentId(String(data.payment_id));
           setAmount(Number(data.amount || 0));
         } else {
+          // 200 sem copia-e-cola: a função devolve `pix_raw` justamente para
+          // revelar onde a HyperCash colocou o QR nessa resposta.
+          logger.error("PIX gerado sem copia-e-cola", { data });
           throw new Error(data?.error || "Erro ao gerar QR Code PIX");
         }
-      } catch (err: any) {
-        setError(err.message || "Erro ao carregar PIX");
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Erro ao carregar PIX");
       } finally {
         setLoading(false);
       }

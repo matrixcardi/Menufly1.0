@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import { maskCpfCnpj, validateCPF } from "@/utils/cpfCnpj";
 import { formatPhone } from "@/lib/validations";
 import { logger } from "@/lib/logger";
+import { extractEdgeFunctionError } from "@/lib/edge-function-error";
 import type { FastSoftCardData } from "@/types/fastsoft";
 
 interface Props {
@@ -278,7 +279,7 @@ export default function HyperCashCardForm({
         },
       });
 
-      if (error) throw new Error(error.message || "Erro ao processar o pagamento.");
+      if (error) throw new Error(await extractEdgeFunctionError(error, "Erro ao processar o pagamento."));
       if (data?.error) throw new Error(data.error);
       if (!data?.transactionId) throw new Error("Resposta inválida do processador de pagamento.");
 
