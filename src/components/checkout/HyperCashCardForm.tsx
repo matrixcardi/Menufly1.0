@@ -39,8 +39,6 @@ const UFS = ["AC","AL","AP","AM","BA","CE","DF","ES","GO","MA","MT","MS","MG","P
 export default function HyperCashCardForm({
   plan, planLabel, amountCents, includeImplementation, onActivated,
 }: Props) {
-  const [sdkReady, setSdkReady] = useState(false);
-  const [sdkError, setSdkError] = useState<string | null>(null);
   const [threeDSEnabled, setThreeDSEnabled] = useState(false);
   const [status, setStatus] = useState<Status>("form");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -74,18 +72,19 @@ export default function HyperCashCardForm({
   const formatCurrency = (cents: number) =>
     (cents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
-  // Carrega o SDK da FastSoft (tokenização acontece no browser: o número do
-  // cartão nunca passa pelo nosso backend).
+  // Carrega o SDK da HyperCash, que habilita 3DS e tokenização. Nenhum dos dois
+  // é pré-requisito da cobrança (ela vai com o PAN), então falha aqui só é
+  // registrada no log: o formulário continua utilizável.
   useEffect(() => {
     if (!publicKey) {
-      setSdkError("Chave pública da HyperCash não configurada.");
+      logger.error("VITE_HYPERCASH_PUBLIC_KEY ausente: cartão seguirá sem tokenização/3DS");
       return;
     }
 
     const init = () => {
       const FastSoft = window.FastSoft;
       if (!FastSoft) {
-        setSdkError("Não foi possível carregar o processador de pagamento.");
+        logger.error("SDK HyperCash carregou sem expor window.FastSoft");
         return;
       }
       try {
@@ -93,10 +92,8 @@ export default function HyperCashCardForm({
         setThreeDSEnabled(
           typeof FastSoft.isThreeDSEnabled === "function" ? !!FastSoft.isThreeDSEnabled() : false,
         );
-        setSdkReady(true);
       } catch (err) {
         logger.error("Falha ao inicializar SDK HyperCash", { err });
-        setSdkError("Não foi possível iniciar o pagamento com cartão.");
       }
     };
 
@@ -112,7 +109,7 @@ export default function HyperCashCardForm({
     script.src = SDK_SRC;
     script.async = true;
     script.onload = init;
-    script.onerror = () => setSdkError("Não foi possível carregar o processador de pagamento.");
+    script.onerror = () => logger.error("Não foi possível carregar o SDK da HyperCash", { src: SDK_SRC });
     document.head.appendChild(script);
   }, [publicKey]);
 
@@ -215,10 +212,6 @@ export default function HyperCashCardForm({
     setErrorMessage(null);
 
     const FastSoft = window.FastSoft;
-    if (!FastSoft) {
-      fail("Processador de pagamento indisponível. Recarregue a página.");
-      return;
-    }
 
     const cardData: FastSoftCardData = {
       number: cardNumber.replace(/\s/g, ""),
@@ -228,37 +221,47 @@ export default function HyperCashCardForm({
       cvv,
     };
 
+    // Tokenização e 3DS são best-effort: a cobrança em si vai com o PAN, porque o
+    // schema da HyperCash não aceita token em `card`. O token só enriquece a
+    // conciliação (metadata.card_token), então falha dele — SDK fora do ar, 403
+    // do /public/card-token, 3DS indisponível — não pode derrubar o pagamento.
+    let cardToken: string | undefined;
+
     try {
-      // 3DS antes da tokenização: o token só é gerado após a autenticação passar.
-      if (threeDSEnabled && FastSoft.initializeThreeDS && FastSoft.authenticateThreeDS && FastSoft.finalizeThreeDS) {
-        await FastSoft.initializeThreeDS({
-          amount: amountCents,
-          currency: "BRL",
-          installments: 1,
-          card: cardData,
-        });
-        await FastSoft.authenticateThreeDS({
-          customer: {
-            name: holderName.trim().toUpperCase(),
-            email: (await supabase.auth.getUser()).data.user?.email ?? "",
-            phoneNumber: phone.replace(/\D/g, ""),
-          },
-          address: {
-            street, streetNumber, complement,
-            zipCode: cep, neighborhood, city, state, country: "BR",
-          },
-        });
-        await FastSoft.finalizeThreeDS();
+      if (FastSoft) {
+        if (threeDSEnabled && FastSoft.initializeThreeDS && FastSoft.authenticateThreeDS && FastSoft.finalizeThreeDS) {
+          await FastSoft.initializeThreeDS({
+            amount: amountCents,
+            currency: "BRL",
+            installments: 1,
+            card: cardData,
+          });
+          await FastSoft.authenticateThreeDS({
+            customer: {
+              name: holderName.trim().toUpperCase(),
+              email: (await supabase.auth.getUser()).data.user?.email ?? "",
+              phoneNumber: phone.replace(/\D/g, ""),
+            },
+            address: {
+              street, streetNumber, complement,
+              zipCode: cep, neighborhood, city, state, country: "BR",
+            },
+          });
+          await FastSoft.finalizeThreeDS();
+        }
+
+        cardToken = (await FastSoft.encrypt(cardData)) || undefined;
       }
+    } catch (err) {
+      logger.error("Tokenização HyperCash falhou; seguindo com o cartão em claro", { err });
+    }
 
-      const cardToken = await FastSoft.encrypt(cardData);
-      if (!cardToken) throw new Error("Não foi possível processar os dados do cartão.");
-
+    try {
       const { data, error } = await supabase.functions.invoke("hypercash-create-transaction", {
         body: {
           plan,
           includeImplementation,
-          cardToken,
+          ...(cardToken ? { cardToken } : {}),
           installments: 1,
           // O schema da HyperCash valida `card.number` como cartão de verdade e
           // recusa o token em qualquer campo de `card`, então o número vai junto.
@@ -301,27 +304,6 @@ export default function HyperCashCardForm({
       fail(message || "Não foi possível concluir o pagamento. Tente novamente.");
     }
   };
-
-  if (sdkError) {
-    return (
-      <div className="text-center py-10 space-y-3">
-        <AlertCircle className="w-8 h-8 text-destructive mx-auto" />
-        <p className="text-sm text-destructive">{sdkError}</p>
-        <p className="text-xs text-muted-foreground">
-          Você ainda pode assinar usando PIX.
-        </p>
-      </div>
-    );
-  }
-
-  if (!sdkReady) {
-    return (
-      <div className="flex flex-col items-center justify-center py-12 gap-3">
-        <Loader2 className="w-6 h-6 animate-spin text-primary" />
-        <p className="text-sm text-muted-foreground">Carregando formulário de pagamento...</p>
-      </div>
-    );
-  }
 
   if (status === "approved") {
     return (

@@ -65,7 +65,10 @@ serve(async (req) => {
 
     const planPrice = PLAN_PRICES_CENTS[plan];
     if (!planPrice) throw new Error("Plano inválido. Use 'start' ou 'elite'.");
-    if (!cardToken) throw new Error("cardToken é obrigatório");
+    // `cardToken` é opcional: a cobrança vai com o PAN em `card.number` porque o
+    // schema recusa o token. Ele só entra em metadata quando a tokenização no
+    // browser deu certo — exigi-lo aqui derrubaria o pagamento por um dado que a
+    // HyperCash nem usa para autorizar.
     if (!customer?.name || !customer?.document) {
       throw new Error("Nome e CPF do titular são obrigatórios");
     }
@@ -165,10 +168,10 @@ serve(async (req) => {
         plan,
         include_implementation: includeImplementation ? "1" : "0",
         external_ref: externalRef,
-        // O token continua sendo gerado no browser e viaja junto para rastrear a
+        // O token, quando o browser conseguiu gerar, viaja aqui para rastrear a
         // sessão de tokenização (e o 3DS embutido nela) na conciliação. Não pode
         // ir na raiz nem dentro de `card`: os dois foram recusados pelo schema.
-        card_token: cardToken,
+        ...(cardToken ? { card_token: String(cardToken) } : {}),
       },
     };
 
