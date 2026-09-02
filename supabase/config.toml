@@ -17,6 +17,9 @@ verify_jwt = false
 [functions.hypercash-create-transaction]
 verify_jwt = false
 
+[functions.hypercash-create-pix-subscription]
+verify_jwt = false
+
 [functions.hypercash-verify-transaction]
 verify_jwt = false
 

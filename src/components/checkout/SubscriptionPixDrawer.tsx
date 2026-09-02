@@ -50,10 +50,10 @@ export function SubscriptionPixDrawer({
   const verify = useCallback(async () => {
     if (!paymentId || confirmed || expired) return;
     try {
-      const { data } = await supabase.functions.invoke("verify-pix-subscription", {
-        body: { payment_id: paymentId },
+      const { data } = await supabase.functions.invoke("hypercash-verify-transaction", {
+        body: { transaction_id: paymentId },
       });
-      if (data?.verified && data?.status === "approved") {
+      if (data?.verified) {
         setConfirmed(true);
         if (pollRef.current) {
           clearInterval(pollRef.current);
@@ -98,7 +98,7 @@ export function SubscriptionPixDrawer({
       setConfirmed(false);
       try {
         const { data, error: fnError } = await supabase.functions.invoke(
-          "create-pix-subscription",
+          "hypercash-create-pix-subscription",
           { body: { plan, includeImplementation } }
         );
         if (fnError) throw new Error(fnError.message || "Erro ao gerar PIX");
