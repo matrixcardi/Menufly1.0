@@ -120,6 +120,9 @@ serve(async (req) => {
     const payload: Record<string, unknown> = {
       amount,
       paymentMethod: "PIX",
+      // Presença exigida pela HyperCash mesmo sem card equivalente; shape interno
+      // (ex.: expiresIn) ainda não confirmado — ajustar se a API pedir mais campos.
+      pix: {},
       customer: {
         name: customer?.name ?? user.email,
         email: user.email,
