@@ -72,6 +72,11 @@ serve(async (req) => {
     const expYear = Number(card?.expirationYear);
     if (!expMonth || expMonth < 1 || expMonth > 12) throw new Error("Mês de expiração do cartão inválido");
     if (!expYear || String(expYear).length !== 4) throw new Error("Ano de expiração do cartão inválido");
+    // A HyperCash exige cvv em claro mesmo com o número tokenizado pela FastSoft.
+    // Trafega só até aqui: nunca é logado (logStep) nem persistido (platform_transactions
+    // grava a resposta da HyperCash, não este payload).
+    const cvv = typeof card?.cvv === "string" ? card.cvv.trim() : "";
+    if (!cvv || cvv.length < 3 || cvv.length > 4) throw new Error("CVV do cartão inválido");
 
     const documentNumber = String(customer.document).replace(/\D/g, "");
     if (documentNumber.length !== 11) throw new Error("CPF inválido");
@@ -128,16 +133,16 @@ serve(async (req) => {
       amount,
       paymentMethod: "CREDIT_CARD",
       // A HyperCash valida `card` com whitelist estrita: token/installments não
-      // são aceitos ali, e number/holderName/expirationMonth/expirationYear são
-      // obrigatórios mesmo com o cartão tokenizado. `number` recebe o token da
-      // FastSoft — o PAN real nunca passa por aqui. CVV propositalmente não é
-      // reenviado (nunca sai do browser); se a HyperCash exigir cvv também,
-      // reavaliar com o suporte deles antes de coletar esse dado no backend.
+      // são aceitos ali, e number/holderName/expirationMonth/expirationYear/cvv
+      // são obrigatórios mesmo com o cartão tokenizado. `number` recebe o token
+      // da FastSoft — o PAN real nunca passa por aqui. cvv é exigido em claro
+      // pela HyperCash; não é logado nem persistido, só repassado nesta chamada.
       card: {
         number: cardToken,
         holderName: customer.name,
         expirationMonth: expMonth,
         expirationYear: expYear,
+        cvv,
       },
       installments: Number(installments) > 0 ? Number(installments) : 1,
       customer: {

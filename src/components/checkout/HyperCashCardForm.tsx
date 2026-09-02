@@ -260,6 +260,7 @@ export default function HyperCashCardForm({
           card: {
             expirationMonth: expMonth,
             expirationYear: expYear,
+            cvv,
           },
           customer: {
             name: holderName.trim().toUpperCase(),
