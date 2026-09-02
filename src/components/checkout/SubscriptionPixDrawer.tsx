@@ -7,6 +7,10 @@ import {
   DrawerTitle,
 } from "@/components/ui/drawer";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { maskCpfCnpj, validateCPF } from "@/utils/cpfCnpj";
+import { formatPhone } from "@/lib/validations";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { extractEdgeFunctionError } from "@/lib/edge-function-error";
@@ -20,6 +24,13 @@ interface Props {
   onActivated: () => void;
 }
 
+/** Dados do pagador exigidos pela HyperCash para emitir a cobrança PIX. */
+interface Payer {
+  name: string;
+  document: string;
+  phone: string;
+}
+
 export function SubscriptionPixDrawer({
   open,
   onOpenChange,
@@ -27,7 +38,15 @@ export function SubscriptionPixDrawer({
   includeImplementation,
   onActivated,
 }: Props) {
-  const [loading, setLoading] = useState(true);
+  // A cobrança só é criada depois que o pagador se identifica: sem CPF a
+  // HyperCash aceita o payload e o provedor recusa com "Erro ao realizar
+  // pagamento", sem apontar o campo que falta.
+  const [payer, setPayer] = useState<Payer | null>(null);
+  const [name, setName] = useState("");
+  const [cpf, setCpf] = useState("");
+  const [phone, setPhone] = useState("");
+
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [expired, setExpired] = useState(false);
   const [pixCode, setPixCode] = useState<string | null>(null);
@@ -86,9 +105,22 @@ export function SubscriptionPixDrawer({
     };
   }, [open, paymentId, confirmed, expired, loading, error, verify]);
 
+  // Fechar o drawer descarta a cobrança em andamento: ao reabrir, o pagador
+  // confirma os dados de novo antes de gerar outro QR.
+  useEffect(() => {
+    if (open) return;
+    setPayer(null);
+    setPixCode(null);
+    setQrImageBase64(null);
+    setPaymentId(null);
+    setError(null);
+    setExpired(false);
+    setConfirmed(false);
+  }, [open]);
+
   // Generate PIX
   useEffect(() => {
-    if (!open) return;
+    if (!open || !payer) return;
     const fetchPix = async () => {
       setLoading(true);
       setError(null);
@@ -101,7 +133,7 @@ export function SubscriptionPixDrawer({
       try {
         const { data, error: fnError } = await supabase.functions.invoke(
           "hypercash-create-pix-subscription",
-          { body: { plan, includeImplementation } }
+          { body: { plan, includeImplementation, customer: payer } }
         );
         if (fnError) {
           const detail = await extractEdgeFunctionError(fnError, "Erro ao gerar PIX");
@@ -126,7 +158,18 @@ export function SubscriptionPixDrawer({
       }
     };
     fetchPix();
-  }, [open, plan, includeImplementation]);
+  }, [open, plan, includeImplementation, payer]);
+
+  const handleSubmitPayer = () => {
+    const digitsCpf = cpf.replace(/\D/g, "");
+    const digitsPhone = phone.replace(/\D/g, "");
+
+    if (name.trim().length < 3) return toast.error("Informe o nome completo do pagador.");
+    if (!validateCPF(digitsCpf)) return toast.error("CPF inválido.");
+    if (digitsPhone.length < 10) return toast.error("Telefone inválido.");
+
+    setPayer({ name: name.trim(), document: digitsCpf, phone: digitsPhone });
+  };
 
   const qrCodeUrl = useMemo(() => {
     if (qrImageBase64) {
@@ -137,9 +180,9 @@ export function SubscriptionPixDrawer({
     return `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(pixCode)}`;
   }, [pixCode, qrImageBase64]);
 
-  // Countdown
+  // Countdown — só corre depois que existe um QR para expirar.
   useEffect(() => {
-    if (!open || loading || error || expired || confirmed) return;
+    if (!open || !pixCode || loading || error || expired || confirmed) return;
     const i = setInterval(() => {
       setTimeLeft((p) => {
         if (p <= 1) {
@@ -151,7 +194,7 @@ export function SubscriptionPixDrawer({
       });
     }, 1000);
     return () => clearInterval(i);
-  }, [open, loading, error, expired, confirmed]);
+  }, [open, pixCode, loading, error, expired, confirmed]);
 
   const handleCopy = useCallback(async () => {
     if (!pixCode) return;
@@ -221,9 +264,19 @@ export function SubscriptionPixDrawer({
                 <p className="font-medium text-destructive">Erro ao gerar PIX</p>
                 <p className="text-sm text-muted-foreground">{error}</p>
               </div>
-              <Button onClick={() => onOpenChange(false)} variant="outline">
-                Fechar
-              </Button>
+              <div className="flex gap-2">
+                <Button
+                  onClick={() => {
+                    setError(null);
+                    setPayer(null);
+                  }}
+                >
+                  Tentar novamente
+                </Button>
+                <Button onClick={() => onOpenChange(false)} variant="outline">
+                  Fechar
+                </Button>
+              </div>
             </div>
           )}
 
@@ -256,7 +309,56 @@ export function SubscriptionPixDrawer({
             </div>
           )}
 
-          {!loading && !error && !expired && !confirmed && (
+          {!payer && !loading && !error && !expired && !confirmed && (
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                A HyperCash exige a identificação do pagador para emitir a cobrança PIX.
+              </p>
+
+              <div className="space-y-1.5">
+                <Label className="text-sm">Nome completo</Label>
+                <Input
+                  placeholder="Como está no seu documento"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  autoComplete="name"
+                  className="h-11"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label className="text-sm">CPF</Label>
+                  <Input
+                    placeholder="000.000.000-00"
+                    value={cpf}
+                    // Trava em 11 dígitos: a HyperCash exige document.type = CPF.
+                    onChange={(e) => setCpf(maskCpfCnpj(e.target.value.replace(/\D/g, "").slice(0, 11)))}
+                    inputMode="numeric"
+                    className="h-11"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-sm">Telefone</Label>
+                  <Input
+                    placeholder="(11) 99999-9999"
+                    value={phone}
+                    onChange={(e) => setPhone(formatPhone(e.target.value))}
+                    inputMode="numeric"
+                    autoComplete="tel"
+                    className="h-11"
+                  />
+                </div>
+              </div>
+
+              <Button onClick={handleSubmitPayer} className="w-full h-11">
+                <QrCode className="w-4 h-4 mr-2" />
+                Gerar QR Code PIX
+              </Button>
+            </div>
+          )}
+
+          {payer && !loading && !error && !expired && !confirmed && (
             <>
               <div className="text-center space-y-1">
                 <p className="text-sm text-muted-foreground">

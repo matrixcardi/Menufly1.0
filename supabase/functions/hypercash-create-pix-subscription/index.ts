@@ -69,10 +69,13 @@ serve(async (req) => {
     const planPrice = PLAN_PRICES_CENTS[plan];
     if (!planPrice) throw new Error("Plano inválido. Use 'start' ou 'elite'.");
 
-    // PIX não precisa de titular de cartão; CPF é opcional aqui (a HyperCash pode
-    // exigir para PIX também — se recusar por isso, tornar obrigatório no front).
-    const documentNumber = customer?.document ? String(customer.document).replace(/\D/g, "") : undefined;
-    if (documentNumber && documentNumber.length !== 11) throw new Error("CPF inválido");
+    // CPF é obrigatório: sem ele a HyperCash aceita o payload e o provedor recusa
+    // a cobrança com "Erro ao realizar pagamento", sem indicar o campo faltante.
+    const documentNumber = customer?.document ? String(customer.document).replace(/\D/g, "") : "";
+    if (documentNumber.length !== 11) throw new Error("CPF do pagador é obrigatório para o PIX.");
+
+    const customerName = String(customer?.name ?? "").trim();
+    if (customerName.length < 3) throw new Error("Nome do pagador é obrigatório para o PIX.");
 
     // Mesmo backstop contra cobrança dupla usado no cartão.
     const { data: existing } = await supabase
@@ -124,9 +127,9 @@ serve(async (req) => {
       // expiresInSeconds: prazo de pagamento do QR/copia-e-cola.
       pix: { expiresInSeconds: 3600 },
       customer: {
-        name: customer?.name ?? user.email,
+        name: customerName,
         email: user.email,
-        ...(documentNumber ? { document: { number: documentNumber, type: "CPF" } } : {}),
+        document: { number: documentNumber, type: "CPF" },
         ...(customer?.phone ? { phone: String(customer.phone).replace(/\D/g, "") } : {}),
       },
       items,
