@@ -230,9 +230,15 @@ Roles disponíveis: `owner`, `manager`, `cashier`, `kitchen`, `delivery`. Verifi
 - `supabase/functions/generate-pix/` — PIX de pedido
 - `supabase/functions/process-card-payment/` — cartão de pedido (MP)
 
-Exceção: o número do cartão da assinatura é tokenizado **no browser** pelo SDK da
-HyperCash (`FastSoft.encrypt`) e só o token trafega até a Edge Function — o dado
-sensível nunca toca nossos servidores.
+Exceção: o cartão da assinatura é tokenizado **no browser** pelo SDK da HyperCash
+(`FastSoft.encrypt`), mas o token **não** substitui o cartão na cobrança. O schema
+do `POST /api/user/transactions` valida `card.number` como cartão de verdade
+(`"card.number must be a credit card"`) e recusa o token em qualquer posição
+(`"card.property cardToken should not exist"`), então número, validade e CVV
+trafegam até a Edge Function e o token vai junto apenas em `metadata.card_token`.
+Consequência: o servidor manipula dado de portador — nunca logar (`logStep`),
+nunca persistir (`platform_transactions` grava a resposta da HyperCash, não o
+payload) e tratar qualquer mudança nessa função como escopo de PCI DSS.
 
 ### Assinatura da plataforma — dois gateways convivendo
 

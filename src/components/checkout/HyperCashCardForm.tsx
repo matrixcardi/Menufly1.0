@@ -260,7 +260,11 @@ export default function HyperCashCardForm({
           includeImplementation,
           cardToken,
           installments: 1,
+          // O schema da HyperCash valida `card.number` como cartão de verdade e
+          // recusa o token em qualquer campo de `card`, então o número vai junto.
+          // O token segue viajando para amarrar a sessão de tokenização/3DS.
           card: {
+            number: cardData.number,
             expirationMonth: expMonth,
             expirationYear: expYear,
             cvv,
@@ -532,7 +536,7 @@ export default function HyperCashCardForm({
       </Button>
 
       <p className="text-xs text-center text-muted-foreground">
-        Seus dados de cartão são criptografados no navegador e não passam pelos nossos servidores.
+        Seus dados são enviados por conexão criptografada e usados apenas para processar este pagamento.
       </p>
     </div>
   );
