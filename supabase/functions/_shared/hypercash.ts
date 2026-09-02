@@ -63,6 +63,22 @@ function authHeader(secretKey: string): string {
   return `Basic ${btoa(`x:${secretKey}`)}`;
 }
 
+/**
+ * A HyperCash embrulha as respostas em `{ status, message, data }` — o recurso
+ * em si vem em `data`. Ler o envelope como se fosse a transação faz `id` sumir.
+ *
+ * O `status` do envelope é numérico (HTTP) e o da transação é string ("paid",
+ * "refused"), então é isso que distingue os dois com segurança.
+ */
+function unwrapEnvelope(parsed: unknown): unknown {
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return parsed;
+  const body = parsed as Record<string, unknown>;
+  const isEnvelope = typeof body.status === "number" &&
+    body.data !== null &&
+    typeof body.data === "object";
+  return isEnvelope ? body.data : parsed;
+}
+
 interface HyperCashRequestOptions {
   secretKey: string;
   method?: string;
@@ -96,7 +112,7 @@ export async function hypercashRequest<T = unknown>(
       throw new HyperCashApiError(res.status, extractErrorMessage(res.status, parsed), parsed);
     }
 
-    return parsed as T;
+    return unwrapEnvelope(parsed) as T;
   } catch (err) {
     if (err instanceof HyperCashApiError) throw err;
     if (err instanceof Error && err.name === "AbortError") {
