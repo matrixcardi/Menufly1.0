@@ -60,7 +60,7 @@ serve(async (req) => {
     logStep("User authenticated", { userId: user.id });
 
     const body = await req.json();
-    const { plan, includeImplementation, cardToken, customer, address, installments } = body ?? {};
+    const { plan, includeImplementation, cardToken, customer, address, installments, card } = body ?? {};
 
     const planPrice = PLAN_PRICES_CENTS[plan];
     if (!planPrice) throw new Error("Plano inválido. Use 'start' ou 'elite'.");
@@ -68,6 +68,10 @@ serve(async (req) => {
     if (!customer?.name || !customer?.document) {
       throw new Error("Nome e CPF do titular são obrigatórios");
     }
+    const expMonth = Number(card?.expirationMonth);
+    const expYear = Number(card?.expirationYear);
+    if (!expMonth || expMonth < 1 || expMonth > 12) throw new Error("Mês de expiração do cartão inválido");
+    if (!expYear || String(expYear).length !== 4) throw new Error("Ano de expiração do cartão inválido");
 
     const documentNumber = String(customer.document).replace(/\D/g, "");
     if (documentNumber.length !== 11) throw new Error("CPF inválido");
@@ -123,12 +127,17 @@ serve(async (req) => {
     const payload: Record<string, unknown> = {
       amount,
       paymentMethod: "CREDIT_CARD",
-      // NOTA: a doc de tokenização (FastSoft.encrypt) não documenta o nome do
-      // campo do token no corpo da transação. `card.token` é a hipótese; se a
-      // HyperCash recusar, conferir com o suporte antes de mudar qualquer outra coisa.
+      // A HyperCash valida `card` com whitelist estrita: token/installments não
+      // são aceitos ali, e number/holderName/expirationMonth/expirationYear são
+      // obrigatórios mesmo com o cartão tokenizado. `number` recebe o token da
+      // FastSoft — o PAN real nunca passa por aqui. CVV propositalmente não é
+      // reenviado (nunca sai do browser); se a HyperCash exigir cvv também,
+      // reavaliar com o suporte deles antes de coletar esse dado no backend.
       card: {
-        token: cardToken,
-        installments: Number(installments) > 0 ? Number(installments) : 1,
+        number: cardToken,
+        holderName: customer.name,
+        expirationMonth: expMonth,
+        expirationYear: expYear,
       },
       installments: Number(installments) > 0 ? Number(installments) : 1,
       customer: {
@@ -142,11 +151,11 @@ serve(async (req) => {
       traceable: false,
       ...(clientIp ? { ip: clientIp } : {}),
       postbackUrl,
-      externalRef,
       metadata: {
         user_id: user.id,
         plan,
         include_implementation: includeImplementation ? "1" : "0",
+        external_ref: externalRef,
       },
     };
 

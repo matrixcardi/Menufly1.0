@@ -257,6 +257,10 @@ export default function HyperCashCardForm({
           includeImplementation,
           cardToken,
           installments: 1,
+          card: {
+            expirationMonth: expMonth,
+            expirationYear: expYear,
+          },
           customer: {
             name: holderName.trim().toUpperCase(),
             document: cpf.replace(/\D/g, ""),
