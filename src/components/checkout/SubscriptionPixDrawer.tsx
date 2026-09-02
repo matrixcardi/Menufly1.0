@@ -32,7 +32,7 @@ export function SubscriptionPixDrawer({
   const [qrImageBase64, setQrImageBase64] = useState<string | null>(null);
   const [amount, setAmount] = useState<number>(0);
   const [copied, setCopied] = useState(false);
-  const [timeLeft, setTimeLeft] = useState(30 * 60);
+  const [timeLeft, setTimeLeft] = useState(60 * 60);
   const [paymentId, setPaymentId] = useState<string | null>(null);
   const [confirmed, setConfirmed] = useState(false);
   const [checking, setChecking] = useState(false);
@@ -91,7 +91,7 @@ export function SubscriptionPixDrawer({
       setLoading(true);
       setError(null);
       setExpired(false);
-      setTimeLeft(30 * 60);
+      setTimeLeft(60 * 60);
       setPixCode(null);
       setQrImageBase64(null);
       setPaymentId(null);
