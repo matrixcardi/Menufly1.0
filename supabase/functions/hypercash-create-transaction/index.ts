@@ -4,6 +4,7 @@ import { getCorsHeaders } from "../_shared/cors.ts";
 import {
   hypercashRequest,
   hypercashErrorDetails,
+  HyperCashApiError,
   isPaidStatus,
   activateSubscription,
   claimTransactionForActivation,
@@ -133,18 +134,6 @@ serve(async (req) => {
     const payload: Record<string, unknown> = {
       amount,
       paymentMethod: "CREDIT_CARD",
-      // A HyperCash valida `card` com whitelist estrita: token/installments não
-      // são aceitos ali, e number/holderName/expirationMonth/expirationYear/cvv
-      // são obrigatórios mesmo com o cartão tokenizado. `number` recebe o token
-      // da FastSoft — o PAN real nunca passa por aqui. cvv é exigido em claro
-      // pela HyperCash; não é logado nem persistido, só repassado nesta chamada.
-      card: {
-        number: cardToken,
-        holderName: customer.name,
-        expirationMonth: expMonth,
-        expirationYear: expYear,
-        cvv,
-      },
       installments: Number(installments) > 0 ? Number(installments) : 1,
       customer: {
         name: customer.name,
@@ -165,13 +154,55 @@ serve(async (req) => {
       },
     };
 
+    // Onde o token entra no corpo da transação não está documentado, e as duas
+    // hipóteses já testadas morreram por motivos diferentes: `card.token` não
+    // existe no schema, e `card.number` é validado como cartão de verdade
+    // ("card.number must be a credit card"). Os dois SDKs chamam o campo de
+    // `cardToken` ao receber de /public/card-token, então tentamos essa forma na
+    // raiz e, se o schema recusar, aninhada em `card`. Assim que a HyperCash
+    // aceitar uma delas, o log diz qual e este loop vira uma forma só.
+    const cardShapes: Array<{ label: string; fields: Record<string, unknown> }> = [
+      { label: "root.cardToken", fields: { cardToken } },
+      {
+        label: "card.cardToken",
+        fields: {
+          card: {
+            cardToken,
+            holderName: customer.name,
+            expirationMonth: expMonth,
+            expirationYear: expYear,
+            cvv,
+          },
+        },
+      },
+    ];
+
     logStep("Creating HyperCash transaction", { amount, plan, includeImplementation });
 
-    const transaction = await hypercashRequest<HyperCashTransaction>("/api/user/transactions", {
-      secretKey,
-      method: "POST",
-      body: payload,
-    });
+    let transaction: HyperCashTransaction | undefined;
+    let acceptedShape: string | undefined;
+    let lastError: unknown;
+
+    for (const shape of cardShapes) {
+      try {
+        transaction = await hypercashRequest<HyperCashTransaction>("/api/user/transactions", {
+          secretKey,
+          method: "POST",
+          body: { ...payload, ...shape.fields },
+        });
+        acceptedShape = shape.label;
+        logStep("Card shape accepted", { shape: shape.label });
+        break;
+      } catch (err) {
+        // Só faz sentido tentar a próxima forma quando a recusa é de schema (400).
+        // Qualquer outro status é problema de credencial/rede: aborta na hora.
+        if (!(err instanceof HyperCashApiError) || err.status !== 400) throw err;
+        logStep("Card shape rejected", { shape: shape.label, ...(hypercashErrorDetails(err) ?? {}) });
+        lastError = err;
+      }
+    }
+
+    if (!transaction) throw lastError ?? new Error("HyperCash recusou todas as formas de envio do cartão.");
 
     logStep("Transaction created", { id: transaction?.id, status: transaction?.status });
 
@@ -215,6 +246,7 @@ serve(async (req) => {
       transactionId: String(transaction.id),
       status: transaction.status,
       activated,
+      card_shape: acceptedShape,
     }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 200,
