@@ -3,7 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import {
   hypercashRequest,
-  HyperCashApiError,
+  hypercashErrorDetails,
   isPaidStatus,
   activateSubscription,
   claimTransactionForActivation,
@@ -209,12 +209,7 @@ serve(async (req) => {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    // `extractErrorMessage` só aproveita `message`/`error` do corpo; validações da
-    // HyperCash costumam vir em outros campos (lista de campos obrigatórios, por
-    // exemplo). Logamos e devolvemos o corpo cru para não depurar às cegas.
-    const details = error instanceof HyperCashApiError
-      ? { hypercash_status: error.status, hypercash_body: error.body }
-      : undefined;
+    const details = hypercashErrorDetails(error);
     logStep("ERROR", { message, ...(details ?? {}) });
     return new Response(JSON.stringify({ error: message, ...(details ?? {}) }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },

@@ -3,6 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import {
   hypercashRequest,
+  hypercashErrorDetails,
   isPaidStatus,
   activateSubscription,
   claimTransactionForActivation,
@@ -220,8 +221,9 @@ serve(async (req) => {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    logStep("ERROR", { message });
-    return new Response(JSON.stringify({ error: message }), {
+    const details = hypercashErrorDetails(error);
+    logStep("ERROR", { message, ...(details ?? {}) });
+    return new Response(JSON.stringify({ error: message, ...(details ?? {}) }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 500,
     });

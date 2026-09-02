@@ -50,6 +50,20 @@ export class HyperCashApiError extends Error {
   }
 }
 
+/**
+ * Corpo cru da recusa, para devolver ao cliente junto do erro.
+ *
+ * `extractErrorMessage` só aproveita `message`/`error`, e a HyperCash põe o
+ * motivo real em outros campos (`error.refusedReason`, lista de campos
+ * obrigatórios). Sem isso, depurar recusa vira adivinhação.
+ */
+export function hypercashErrorDetails(
+  error: unknown,
+): { hypercash_status: number; hypercash_body: unknown } | undefined {
+  if (!(error instanceof HyperCashApiError)) return undefined;
+  return { hypercash_status: error.status, hypercash_body: error.body };
+}
+
 function extractErrorMessage(status: number, body: unknown): string {
   if (status === 401) return "Credenciais da HyperCash inválidas.";
   if (status === 403) return "Chave da HyperCash sem permissão para esta operação.";
