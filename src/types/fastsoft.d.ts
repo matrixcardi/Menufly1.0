@@ -1,5 +1,7 @@
 /**
- * SDK de tokenização da HyperCash, carregado de https://js.fastsoftbrasil.com/security.js
+ * SDK de tokenização da HyperCash, carregado de https://js.hypercash.com.br/security.js
+ * (o global exposto continua sendo `FastSoft`, herança do host antigo
+ * js.fastsoftbrasil.com/security.js, que a doc ainda cita)
  * Doc: https://docs.hypercash.com.br/docs/intro/card-tokenization
  *      https://docs.hypercash.com.br/docs/intro/3ds-authentication
  *

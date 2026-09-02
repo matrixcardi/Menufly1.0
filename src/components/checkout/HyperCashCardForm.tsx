@@ -24,7 +24,9 @@ interface Props {
 
 type Status = "form" | "processing" | "approved" | "failed";
 
-const SDK_SRC = "https://js.fastsoftbrasil.com/security.js";
+// Host novo da HyperCash. Substitui js.fastsoftbrasil.com (ainda no ar e ainda
+// citado na doc): mesma superfície de API, mas tokeniza contra o backend atual.
+const SDK_SRC = "https://js.hypercash.com.br/security.js";
 const SDK_ID = "fastsoft-sdk-script";
 
 // Cartão autoriza em 1–5s e confirma em até 30s; damos folga antes de desistir.
