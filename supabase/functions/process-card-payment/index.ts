@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import { publicCorsHeaders } from "../_shared/cors.ts";
+import { buildMetaContext, sendPurchaseEvent } from "../_shared/meta-capi.ts";
 
 const logStep = (step: string, details?: any) => {
   const detailsStr = details ? ` - ${JSON.stringify(details)}` : '';
@@ -252,6 +253,7 @@ serve(async (req) => {
       device_id,
       payer_first_name,
       payer_last_name,
+      meta,
     } = await req.json();
 
     orderId = order_id;
@@ -402,6 +404,10 @@ serve(async (req) => {
       .eq("id", orderId);
 
     logStep("Payment processed", { payment_id: paymentResult.payment_id, status: paymentResult.status });
+
+    if (paymentResult.status === "approved") {
+      await sendPurchaseEvent(supabaseClient, orderId, buildMetaContext(req, meta));
+    }
 
     return new Response(JSON.stringify({
       success: true,

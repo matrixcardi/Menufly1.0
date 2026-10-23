@@ -15,6 +15,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useCart } from "@/contexts/CartContext";
 import { translateError } from "@/lib/error-messages";
+import { trackPurchase, purchaseEventId, getMetaBrowserContext } from "@/lib/meta-pixel";
 
 interface CardPaymentDrawerProps {
   open: boolean;
@@ -25,6 +26,9 @@ interface CardPaymentDrawerProps {
   restaurantSlug?: string;
   total: number;
   customerName: string;
+  customerPhone: string;
+  contentIds: string[];
+  numItems: number;
   deliveryMethod: "pickup" | "delivery";
   mpPublicKey: string;
 }
@@ -46,11 +50,15 @@ export function CardPaymentDrawer({
   restaurantSlug,
   total,
   customerName,
+  customerPhone,
+  contentIds,
+  numItems,
   deliveryMethod,
   mpPublicKey,
 }: CardPaymentDrawerProps) {
   const navigate = useNavigate();
   const { clearCart } = useCart();
+  const trackedOrderRef = useRef<string | null>(null);
   const [status, setStatus] = useState<CardStatus>("form");
   const [loading, setLoading] = useState(false);
   const [mpReady, setMpReady] = useState(false);
@@ -162,6 +170,20 @@ export function CardPaymentDrawer({
   const handleApproved = useCallback(async () => {
     setStatus("approved");
 
+    // O CAPI fica com process-card-payment / check-card-status (mesmo event_id)
+    if (trackedOrderRef.current !== orderId) {
+      trackedOrderRef.current = orderId;
+      trackPurchase(
+        orderNumber,
+        total,
+        numItems,
+        restaurantId,
+        { phone: customerPhone, name: customerName },
+        contentIds,
+        { eventId: purchaseEventId(orderId), serverSide: false }
+      );
+    }
+
     // Send WhatsApp order confirmation after payment is confirmed
     if (restaurantId && orderId) {
       supabase.functions.invoke("whatsapp-bot", {
@@ -199,7 +221,7 @@ export function CardPaymentDrawer({
       });
       navigate(`/pedido?${params.toString()}`);
     }, 2000);
-  }, [restaurantId, orderId, orderNumber, customerName, deliveryMethod, total, restaurantSlug, clearCart, onOpenChange, navigate]);
+  }, [restaurantId, orderId, orderNumber, customerName, customerPhone, contentIds, numItems, deliveryMethod, total, restaurantSlug, clearCart, onOpenChange, navigate]);
 
   // Desafio 3DS: submete o creq no iframe e faz polling do resultado no backend
   useEffect(() => {
@@ -227,6 +249,7 @@ export function CardPaymentDrawer({
             order_id: orderId,
             payment_id: challenge.payment_id,
             restaurant_id: restaurantId,
+            meta: getMetaBrowserContext(),
           },
         });
 
@@ -327,6 +350,7 @@ export function CardPaymentDrawer({
           device_id: (window as any).MP_DEVICE_SESSION_ID || null,
           payer_first_name: payerFirstName,
           payer_last_name: payerLastName,
+          meta: getMetaBrowserContext(),
         },
       });
 

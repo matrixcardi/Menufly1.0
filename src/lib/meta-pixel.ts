@@ -74,6 +74,24 @@ function getMetaCookies() {
   return cookies;
 }
 
+/**
+ * Cookies e URL da página para as Edge Functions de pagamento, que enviam o
+ * Purchase via Conversions API e não enxergam esses dados sozinhas.
+ */
+export function getMetaBrowserContext() {
+  const metaCookies = getMetaCookies();
+  return {
+    fbp: metaCookies._fbp || undefined,
+    fbc: metaCookies._fbc || undefined,
+    source_url: typeof window !== "undefined" ? window.location.href : undefined,
+  };
+}
+
+/** Mesmo formato de supabase/functions/_shared/meta-capi.ts — navegador e servidor deduplicam por ele. */
+export function purchaseEventId(orderId: string): string {
+  return `purchase-${orderId}`;
+}
+
 // ─── Core tracking functions ─────────────────────────────────
 
 function trackEvent(eventName: string, params?: Record<string, unknown>, eventId?: string) {
@@ -283,9 +301,11 @@ export function trackPurchase(
   numItems: number,
   restaurantId?: string,
   userInfo?: UserInfo,
-  contentIds?: string[]
+  contentIds?: string[],
+  // serverSide: false quando a Edge Function de pagamento já envia o Purchase via CAPI
+  opts?: { eventId?: string; serverSide?: boolean }
 ) {
-  const eventId = generateEventId();
+  const eventId = opts?.eventId || generateEventId();
   const data: Record<string, unknown> = {
     value: totalValue,
     currency: "BRL",
@@ -298,7 +318,7 @@ export function trackPurchase(
   }
   trackEvent("Purchase", data, eventId);
 
-  if (restaurantId) {
+  if (restaurantId && opts?.serverSide !== false) {
     trackServerEvent(restaurantId, "Purchase", eventId, data, userInfo);
   }
 }

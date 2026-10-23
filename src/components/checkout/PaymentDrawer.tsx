@@ -15,7 +15,7 @@ import { useCart } from "@/contexts/CartContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { logger } from "@/lib/logger";
-import { trackPurchase, trackAddPaymentInfo } from "@/lib/meta-pixel";
+import { trackPurchase, trackAddPaymentInfo, purchaseEventId } from "@/lib/meta-pixel";
 import { PixPaymentDrawer } from "./PixPaymentDrawer";
 import { CardPaymentDrawer } from "./CardPaymentDrawer";
 import { translateError } from "@/lib/error-messages";
@@ -86,6 +86,13 @@ export function PaymentDrawer({
   const [cardOrderId, setCardOrderId] = useState<string | null>(null);
   const [cardOrderNumber, setCardOrderNumber] = useState<string | null>(null);
   const [cardTotal, setCardTotal] = useState(0);
+
+  // Snapshot do pedido online para o Purchase disparado após a confirmação do pagamento
+  const [onlinePurchase, setOnlinePurchase] = useState<{ contentIds: string[]; numItems: number; customerPhone: string }>({
+    contentIds: [],
+    numItems: 0,
+    customerPhone: "",
+  });
 
   // Fetch payment settings
   useEffect(() => {
@@ -232,6 +239,10 @@ export function PaymentDrawer({
         }).catch(() => {});
       }
 
+      if (isPix || isCardOnline) {
+        setOnlinePurchase({ contentIds, numItems: items.length, customerPhone: customerInfo.phone });
+      }
+
       // If PIX, save to history and open the PIX payment drawer
       if (isPix) {
         const { saveOrderToHistory } = await import("@/hooks/useOrderHistory");
@@ -282,7 +293,8 @@ export function PaymentDrawer({
         items.length,
         restaurantId,
         { phone: customerInfo.phone, name: customerInfo.name },
-        contentIds
+        contentIds,
+        result.order_id ? { eventId: purchaseEventId(result.order_id) } : undefined
       );
 
       // Save order to history
@@ -588,6 +600,9 @@ export function PaymentDrawer({
         restaurantSlug={restaurantSlug}
         total={pixTotal}
         customerName={customerInfo.name}
+        customerPhone={onlinePurchase.customerPhone}
+        contentIds={onlinePurchase.contentIds}
+        numItems={onlinePurchase.numItems}
         deliveryMethod={deliveryMethod}
       />
     )}
@@ -602,6 +617,9 @@ export function PaymentDrawer({
         restaurantSlug={restaurantSlug}
         total={cardTotal}
         customerName={customerInfo.name}
+        customerPhone={onlinePurchase.customerPhone}
+        contentIds={onlinePurchase.contentIds}
+        numItems={onlinePurchase.numItems}
         deliveryMethod={deliveryMethod}
         mpPublicKey={mpPublicKey}
       />

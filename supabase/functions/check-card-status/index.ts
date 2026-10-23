@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import { publicCorsHeaders } from "../_shared/cors.ts";
+import { buildMetaContext, sendPurchaseEvent } from "../_shared/meta-capi.ts";
 
 const logStep = (step: string, details?: any) => {
   const detailsStr = details ? ` - ${JSON.stringify(details)}` : '';
@@ -20,7 +21,7 @@ serve(async (req) => {
   }
 
   try {
-    const { order_id, payment_id, restaurant_id } = await req.json();
+    const { order_id, payment_id, restaurant_id, meta } = await req.json();
 
     if (!order_id || !payment_id || !restaurant_id) {
       throw new Error("order_id, payment_id and restaurant_id are required");
@@ -94,13 +95,19 @@ serve(async (req) => {
     // Confirma o pedido conforme o desfecho do desafio 3DS.
     // confirm_pix_payment não serve aqui: ela rejeita pedidos com payment_method != 'pix'.
     if (status === "approved") {
-      await supabaseClient
+      const { data: paidRows } = await supabaseClient
         .from("orders")
         .update({ payment_status: "paid", payment_method: "card", status: "pending" })
         .eq("id", order_id)
         .eq("restaurant_id", restaurant_id)
-        .eq("payment_status", "awaiting_payment");
+        .eq("payment_status", "awaiting_payment")
+        .select("id");
       logStep("Order marked as paid", { order_id });
+
+      // Só a chamada que fez a transição envia o Purchase — o polling 3DS repete.
+      if (paidRows && paidRows.length > 0) {
+        await sendPurchaseEvent(supabaseClient, order_id, buildMetaContext(req, meta));
+      }
     } else if (status === "rejected" || status === "cancelled") {
       await supabaseClient
         .from("orders")

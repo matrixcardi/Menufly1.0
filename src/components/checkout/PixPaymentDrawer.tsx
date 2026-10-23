@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { translateError } from "@/lib/error-messages";
+import { trackPurchase, purchaseEventId, getMetaBrowserContext } from "@/lib/meta-pixel";
 
 interface PixPaymentDrawerProps {
   open: boolean;
@@ -21,6 +22,11 @@ interface PixPaymentDrawerProps {
   restaurantSlug?: string;
   total: number;
   customerName: string;
+  // Opcionais: o histórico de pedidos (OrdersTab) reabre o PIX sem esses dados.
+  // O Purchase do servidor lê tudo do pedido no banco de qualquer forma.
+  customerPhone?: string;
+  contentIds?: string[];
+  numItems?: number;
   deliveryMethod: "pickup" | "delivery";
 }
 
@@ -33,6 +39,9 @@ export function PixPaymentDrawer({
   restaurantSlug,
   total,
   customerName,
+  customerPhone,
+  contentIds = [],
+  numItems = 0,
   deliveryMethod,
 }: PixPaymentDrawerProps) {
   const navigate = useNavigate();
@@ -48,6 +57,7 @@ export function PixPaymentDrawer({
   const [paymentConfirmed, setPaymentConfirmed] = useState(false);
   const [checkingPayment, setCheckingPayment] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const trackedOrderRef = useRef<string | null>(null);
 
   const formatCurrency = (value: number) =>
     value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -74,12 +84,28 @@ export function PixPaymentDrawer({
     navigate(`/pedido?${params.toString()}`);
   }, [orderNumber, customerName, deliveryMethod, total, restaurantSlug, navigate, onOpenChange]);
 
+  // Polling e "Já paguei" podem confirmar ao mesmo tempo — o Purchase sai uma vez por pedido.
+  // O CAPI fica com a Edge Function check-pix-status (mesmo event_id).
+  const trackPurchaseOnce = useCallback(() => {
+    if (trackedOrderRef.current === orderId) return;
+    trackedOrderRef.current = orderId;
+    trackPurchase(
+      orderNumber,
+      total,
+      numItems,
+      restaurantId,
+      { phone: customerPhone, name: customerName },
+      contentIds,
+      { eventId: purchaseEventId(orderId), serverSide: false }
+    );
+  }, [orderId, orderNumber, total, numItems, restaurantId, customerPhone, customerName, contentIds]);
+
   const checkPaymentStatus = useCallback(async () => {
     if (!paymentId || !orderId || !restaurantId || paymentConfirmed || expired) return;
 
     try {
       const { data, error: fnError } = await supabase.functions.invoke("check-pix-status", {
-        body: { order_id: orderId, payment_id: paymentId, restaurant_id: restaurantId },
+        body: { order_id: orderId, payment_id: paymentId, restaurant_id: restaurantId, meta: getMetaBrowserContext() },
       });
 
       if (fnError) {
@@ -89,6 +115,7 @@ export function PixPaymentDrawer({
 
       if (data?.success && data?.status === "approved") {
         setPaymentConfirmed(true);
+        trackPurchaseOnce();
         if (pollRef.current) {
           clearInterval(pollRef.current);
           pollRef.current = null;
@@ -111,7 +138,7 @@ export function PixPaymentDrawer({
     } catch (err) {
       console.error("Error checking PIX status:", err);
     }
-  }, [paymentId, orderId, restaurantId, paymentConfirmed, expired, goToConfirmation]);
+  }, [paymentId, orderId, restaurantId, paymentConfirmed, expired, goToConfirmation, trackPurchaseOnce]);
 
   useEffect(() => {
     if (!open || !paymentId || !gatewayUsed || paymentConfirmed || expired || loading || error) return;
@@ -243,7 +270,7 @@ export function PixPaymentDrawer({
     setCheckingPayment(true);
     try {
       const { data, error: fnError } = await supabase.functions.invoke("check-pix-status", {
-        body: { order_id: orderId, payment_id: paymentId, restaurant_id: restaurantId },
+        body: { order_id: orderId, payment_id: paymentId, restaurant_id: restaurantId, meta: getMetaBrowserContext() },
       });
 
       if (fnError || !data?.success) {
@@ -256,6 +283,7 @@ export function PixPaymentDrawer({
 
       if (data.status === "approved") {
         setPaymentConfirmed(true);
+        trackPurchaseOnce();
         if (pollRef.current) {
           clearInterval(pollRef.current);
           pollRef.current = null;

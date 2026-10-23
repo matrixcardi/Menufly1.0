@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import { publicCorsHeaders } from "../_shared/cors.ts";
+import { buildMetaContext, sendPurchaseEvent } from "../_shared/meta-capi.ts";
 
 const logStep = (step: string, details?: any) => {
   const detailsStr = details ? ` - ${JSON.stringify(details)}` : '';
@@ -13,7 +14,7 @@ serve(async (req) => {
   }
 
   try {
-    const { order_id, payment_id, restaurant_id } = await req.json();
+    const { order_id, payment_id, restaurant_id, meta } = await req.json();
 
     if (!order_id || !payment_id || !restaurant_id) {
       throw new Error("order_id, payment_id and restaurant_id are required");
@@ -25,6 +26,16 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_URL") ?? "",
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
     );
+
+    // confirm_pix_payment só retorna success na transição awaiting_payment → paid,
+    // então o polling repetido não gera Purchase duplicado.
+    const confirmAndTrack = async () => {
+      const { data: confirmResult } = await supabaseClient.rpc("confirm_pix_payment", { p_order_id: order_id });
+      logStep("Payment confirmed via DB function");
+      if (confirmResult?.success) {
+        await sendPurchaseEvent(supabaseClient, order_id, buildMetaContext(req, meta));
+      }
+    };
 
     // Fetch restaurant token
     const { data: restaurant, error: restError } = await supabaseClient
@@ -92,8 +103,7 @@ serve(async (req) => {
             logStep("Payment status after refresh", { status });
 
             if (status === "approved") {
-              await supabaseClient.rpc("confirm_pix_payment", { p_order_id: order_id });
-              logStep("Payment confirmed via DB function");
+              await confirmAndTrack();
             }
 
             return new Response(JSON.stringify({ success: true, status }), {
@@ -112,8 +122,7 @@ serve(async (req) => {
 
     // If approved, confirm payment in DB
     if (status === "approved") {
-      await supabaseClient.rpc("confirm_pix_payment", { p_order_id: order_id });
-      logStep("Payment confirmed via DB function");
+      await confirmAndTrack();
     }
 
     return new Response(JSON.stringify({ success: true, status }), {
